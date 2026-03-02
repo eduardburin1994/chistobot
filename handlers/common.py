@@ -122,7 +122,10 @@ async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 🔴 <b>3 и более пакетов</b> — {admin_data['prices']['3+']} ₽\n"
         f"  <i>(фиксированная цена за весь объём)</i>\n\n"
         "⚠️ <b>Важно:</b> Общий вес всех пакетов не должен превышать 15 кг!\n\n"
-        "💳 Оплата наличными или переводом курьеру после выполнения."
+        "💳 <b>Способы оплаты:</b>\n"
+        "• 💵 Наличные курьеру\n"
+        "• 💳 Перевод на карту курьера\n"
+        "• 💻 Онлайн-оплата — <i>в разработке</i> 🔧"
     )
     
     keyboard = get_main_keyboard(query.from_user.id in admin_data['admins'])
