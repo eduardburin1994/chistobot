@@ -1,4 +1,4 @@
-# handlers/admin.py (дополненный)
+# handlers/admin.py
 from config import admin_data
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
@@ -323,7 +323,7 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============== АДМИН ПАНЕЛЬ ===============
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ-панель с кнопкой тестового режима"""
+    """Админ-панель с улучшенным меню"""
     query = update.callback_query
     
     if query.from_user.id not in admin_data['admins']:
@@ -340,17 +340,21 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     test_status = "🧪 ВКЛ" if admin_data.get('test_mode', False) else "✅ ВЫКЛ"
     
+    # Статистика для быстрого просмотра
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    today_orders = [o for o in orders if o[9] == today] if orders else []
+    
     text = (
         f"👑 <b>СУПЕР-АДМИН ПАНЕЛЬ</b>\n\n"
         f"🧪 <b>Тестовый режим:</b> {test_status}\n\n"
-        f"📊 <b>Текущие цены:</b>\n"
+        f"📊 <b>Краткая статистика:</b>\n"
+        f"• 📦 Заказов сегодня: {len(today_orders)}\n"
+        f"• 👥 Всего клиентов: {len(clients)} (🟢 {active_users} активных)\n"
+        f"• 💬 Новых сообщений: {new_messages}\n\n"
+        f"💰 <b>Текущие цены:</b>\n"
         f"• 1 мешок: {admin_data['prices']['1']} ₽\n"
         f"• 2 мешка: {admin_data['prices']['2']} ₽\n"
         f"• 3+ мешков: {admin_data['prices']['3+']} ₽/мешок\n\n"
-        f"📊 <b>Статистика:</b>\n"
-        f"• 📦 Заказов: {len(orders)}\n"
-        f"• 👥 Клиентов: {len(clients)} (🟢 {active_users} активных)\n"
-        f"• 💬 Сообщений: {len(messages)} (🆕 {new_messages} новых)\n\n"
         f"<b>Выберите раздел:</b>"
     )
     
@@ -361,8 +365,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("💰 ИЗМЕНИТЬ ЦЕНЫ", callback_data='admin_prices_menu')],
         [InlineKeyboardButton("📢 МАССОВАЯ РАССЫЛКА", callback_data='admin_broadcast')],
         [InlineKeyboardButton("🚫 Черный список", callback_data='admin_blacklist')],
-        [InlineKeyboardButton("📊 Статистика", callback_data='admin_stats')],
+        [InlineKeyboardButton("📊 РАСШИРЕННАЯ СТАТИСТИКА", callback_data='admin_stats')],
         [InlineKeyboardButton("🧪 Тестовый режим", callback_data='toggle_test_mode')],
+        [InlineKeyboardButton("📈 Экспорт данных", callback_data='admin_export')],
+        [InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
     ]
     
@@ -389,7 +395,9 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if data.startswith('complete_'):
         order_id = int(data.replace('complete_', ''))
-        db.update_order_status(order_id, 'completed')
+        
+        # Сначала освобождаем слот и обновляем статус
+        db.complete_order(order_id)
         
         order = db.get_order_by_id(order_id)
         if order:
@@ -407,10 +415,12 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             except Exception as e:
                 print(f"❌ Не удалось уведомить клиента {client_id}: {e}")
         
-        await query.edit_message_text(f"✅ Заказ #{order_id} выполнен")
+        await query.edit_message_text(f"✅ Заказ #{order_id} выполнен, слот освобождён")
     
     elif data.startswith('cancel_'):
         order_id = int(data.replace('cancel_', ''))
+        
+        # Отменяем заказ (функция уже удаляет слот)
         db.cancel_order(order_id)
         
         order = db.get_order_by_id(order_id)
@@ -428,8 +438,191 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             except Exception as e:
                 print(f"❌ Не удалось уведомить клиента {client_id}: {e}")
         
-        await query.edit_message_text(f"❌ Заказ #{order_id} отменён")
+        await query.edit_message_text(f"❌ Заказ #{order_id} отменён, слот освобождён")
+
+# =============== СТАТИСТИКА ===============
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Улучшенная статистика"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    orders = db.get_all_orders()
+    users = db.get_all_users()
+    
+    # Общая статистика по заказам
+    total_orders = len(orders)
+    new_orders = [o for o in orders if o[13] == 'new']
+    completed = [o for o in orders if o[13] == 'completed']
+    cancelled = [o for o in orders if o[13] == 'cancelled']
+    
+    # Статистика по дням
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    today_orders = [o for o in orders if o[9] == today]
+    
+    # Статистика по неделе
+    week_ago = datetime.datetime.now() - datetime.timedelta(days=7)
+    week_orders = []
+    for o in orders:
+        try:
+            order_date = datetime.datetime.strptime(o[9], "%d.%m.%Y")
+            if order_date >= week_ago:
+                week_orders.append(o)
+        except:
+            pass
+    
+    # Финансовая статистика
+    total_revenue = sum(o[12] for o in orders)
+    today_revenue = sum(o[12] for o in today_orders)
+    week_revenue = sum(o[12] for o in week_orders)
+    
+    # Средний чек
+    avg_check = total_revenue / total_orders if total_orders > 0 else 0
+    
+    # Статистика по мешкам
+    total_bags = sum(o[11] for o in orders)
+    avg_bags = total_bags / total_orders if total_orders > 0 else 0
+    
+    # Самая популярная дата/время
+    time_stats = {}
+    for o in orders:
+        time_slot = o[10]  # order_time
+        time_stats[time_slot] = time_stats.get(time_slot, 0) + 1
+    
+    most_popular_time = max(time_stats.items(), key=lambda x: x[1]) if time_stats else ("нет данных", 0)
+    
+    # Статистика по дням недели
+    day_stats = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+    days_names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    
+    for o in orders:
+        try:
+            order_date = datetime.datetime.strptime(o[9], "%d.%m.%Y")
+            day_stats[order_date.weekday()] += 1
+        except:
+            pass
+    
+    most_popular_day = max(day_stats.items(), key=lambda x: x[1])
+    
+    text = (
+        f"📊 <b>РАСШИРЕННАЯ СТАТИСТИКА</b>\n\n"
+        f"💰 <b>Финансы:</b>\n"
+        f"• За сегодня: {today_revenue} ₽\n"
+        f"• За неделю: {week_revenue} ₽\n"
+        f"• Всего: {total_revenue} ₽\n"
+        f"• Средний чек: {avg_check:.0f} ₽\n\n"
         
+        f"📅 <b>Заказы:</b>\n"
+        f"• За сегодня: {len(today_orders)}\n"
+        f"• За неделю: {len(week_orders)}\n"
+        f"• Всего: {total_orders}\n\n"
+        
+        f"📦 <b>Статусы:</b>\n"
+        f"• 🆕 Новых: {len(new_orders)}\n"
+        f"• ✅ Выполнено: {len(completed)}\n"
+        f"• ❌ Отменено: {len(cancelled)}\n\n"
+        
+        f"🛍 <b>Мешки:</b>\n"
+        f"• Всего вывезено: {total_bags} мешков\n"
+        f"• В среднем: {avg_bags:.1f} мешка/заказ\n\n"
+        
+        f"⏰ <b>Популярное время:</b>\n"
+        f"• {most_popular_time[0]} — {most_popular_time[1]} заказов\n"
+        f"• Популярный день: {days_names[most_popular_day[0]]} — {most_popular_day[1]} заказов\n\n"
+        
+        f"👥 <b>Клиенты:</b>\n"
+        f"• Всего: {len(users)}\n"
+        f"• Активных: {len([u for u in users if u[0] not in admin_data.get('blocked_users', [])])}\n"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("📊 Детальная статистика", callback_data='admin_stats_detailed')],
+        [InlineKeyboardButton("📈 Графики", callback_data='admin_stats_charts')],
+        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Детальная статистика по дням"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    orders = db.get_all_orders()
+    
+    # Группировка по датам
+    daily_stats = {}
+    for o in orders:
+        date = o[9]
+        if date not in daily_stats:
+            daily_stats[date] = {'count': 0, 'revenue': 0, 'bags': 0}
+        daily_stats[date]['count'] += 1
+        daily_stats[date]['revenue'] += o[12]
+        daily_stats[date]['bags'] += o[11]
+    
+    # Сортируем по дате (последние 7 дней)
+    sorted_dates = sorted(daily_stats.keys(), reverse=True)[:7]
+    
+    text = "📊 <b>ДЕТАЛЬНАЯ СТАТИСТИКА (последние 7 дней)</b>\n\n"
+    
+    for date in sorted_dates:
+        stats = daily_stats[date]
+        text += f"<b>{date}:</b>\n"
+        text += f"  • Заказов: {stats['count']}\n"
+        text += f"  • Выручка: {stats['revenue']} ₽\n"
+        text += f"  • Мешков: {stats['bags']}\n\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("◀️ Назад к статистике", callback_data='admin_stats')],
+        [InlineKeyboardButton("◀️ В админку", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_stats_charts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Визуальная статистика (текстовые графики)"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    orders = db.get_all_orders()
+    
+    # Статистика по часам
+    hour_stats = {}
+    for o in orders:
+        time_slot = o[10].split('-')[0]  # берём только начало
+        hour_stats[time_slot] = hour_stats.get(time_slot, 0) + 1
+    
+    text = "📈 <b>ГРАФИКИ (текстовое представление)</b>\n\n"
+    text += "<b>Заказы по времени:</b>\n"
+    
+    # Сортируем по часу
+    sorted_hours = sorted(hour_stats.keys())
+    max_count = max(hour_stats.values()) if hour_stats else 1
+    
+    for hour in sorted_hours:
+        count = hour_stats[hour]
+        bar_length = int(20 * count / max_count)
+        bar = "█" * bar_length
+        text += f"{hour}: {bar} {count}\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("◀️ Назад к статистике", callback_data='admin_stats')],
+        [InlineKeyboardButton("◀️ В админку", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+# =============== ОСТАЛЬНЫЕ ФУНКЦИИ ===============
+
 async def toggle_test_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Включение/выключение тестового режима"""
     query = update.callback_query
@@ -800,36 +993,36 @@ async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return ConversationHandler.END
 
-async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Статистика"""
+async def admin_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт данных (заглушка для будущего функционала)"""
     query = update.callback_query
     await query.answer()
     
-    if query.from_user.id not in admin_data['admins']:
-        return
+    text = (
+        "📈 <b>ЭКСПОРТ ДАННЫХ</b>\n\n"
+        "Функция находится в разработке.\n\n"
+        "В будущем здесь можно будет экспортировать:\n"
+        "• Заказы в Excel\n"
+        "• Статистику в CSV\n"
+        "• Отчёты по дням/неделям/месяцам"
+    )
     
-    orders = db.get_all_orders()
+    keyboard = [[InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]]
     
-    today = datetime.datetime.now().strftime("%d.%m.%Y")
-    today_orders = [o for o in orders if o[9] == today]
-    
-    new_orders = [o for o in orders if o[13] == 'new']
-    completed = [o for o in orders if o[13] == 'completed']
-    cancelled = [o for o in orders if o[13] == 'cancelled']
-    
-    total_revenue = sum(o[12] for o in orders)
-    today_revenue = sum(o[12] for o in today_orders)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Настройки админки (заглушка для будущего функционала)"""
+    query = update.callback_query
+    await query.answer()
     
     text = (
-        f"📊 <b>СТАТИСТИКА</b>\n\n"
-        f"💰 <b>Выручка:</b>\n"
-        f"• За сегодня: {today_revenue} ₽\n"
-        f"• Всего: {total_revenue} ₽\n\n"
-        f"📅 <b>За сегодня:</b> {len(today_orders)} заказов\n"
-        f"🆕 <b>Новых:</b> {len(new_orders)}\n"
-        f"✅ <b>Выполнено:</b> {len(completed)}\n"
-        f"❌ <b>Отменено:</b> {len(cancelled)}\n"
-        f"📦 <b>Всего заказов:</b> {len(orders)}\n"
+        "⚙️ <b>НАСТРОЙКИ</b>\n\n"
+        "Функция находится в разработке.\n\n"
+        "В будущем здесь можно будет настраивать:\n"
+        "• Уведомления\n"
+        "• Права администраторов\n"
+        "• Параметры заказов"
     )
     
     keyboard = [[InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]]
