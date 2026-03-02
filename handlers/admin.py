@@ -841,4 +841,240 @@ async def show_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if user_info:
         if user_info[2]:  # first_name
-            text += f"👤 <b>И
+            text += f"👤 <b>Имя:</b> {user_info[2]}\n"
+        if user_info[3]:  # last_name
+            text += f"👤 <b>Фамилия:</b> {user_info[3]}\n"
+        if user_info[4]:  # phone
+            text += f"📞 <b>Телефон:</b> {user_info[4]}\n"
+    
+    text += f"\nСвязаться с ним можно только по телефону из заказа."
+    
+    await query.edit_message_text(
+        text,
+        parse_mode='HTML'
+    )
+
+async def admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр всех сообщений от клиентов"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    messages = db.get_all_messages()
+    
+    if not messages:
+        await query.edit_message_text(
+            "📭 Нет сообщений от клиентов",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
+            ]])
+        )
+        return
+    
+    text = "💬 <b>Сообщения от клиентов:</b>\n\n"
+    
+    for msg in messages[:10]:
+        # msg: (id, user_id, username, first_name, phone, user_msg, reply, status, created)
+        msg_id, user_id, username, first_name, phone, user_msg, reply, status, created = msg
+        
+        status_emoji = "🆕" if status == 'new' else "✅"
+        username_text = f"@{username}" if username else first_name
+        
+        # Обрезаем длинные сообщения
+        short_msg = user_msg[:50] + "..." if len(user_msg) > 50 else user_msg
+        
+        text += f"{status_emoji} <b>#{msg_id}</b> от {username_text}\n"
+        text += f"📝 {short_msg}\n"
+        text += f"📅 {created}\n\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Подробнее", callback_data='admin_messages_all')],
+        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_messages_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр всех сообщений с деталями"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    messages = db.get_all_messages()
+    
+    if not messages:
+        await query.edit_message_text(
+            "📭 Нет сообщений от клиентов",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
+            ]])
+        )
+        return
+    
+    # Отправляем первые 5 сообщений с деталями
+    for i, msg in enumerate(messages[:5]):
+        msg_id, user_id, username, first_name, phone, user_msg, reply, status, created = msg
+        
+        status_text = "🆕 Новое" if status == 'new' else "✅ Отвечено"
+        
+        # Username с ссылкой если есть
+        if username and username != "неизвестно" and username != "нет username":
+            clean_username = username.replace('@', '')
+            username_text = f"<a href='https://t.me/{clean_username}'>@{username}</a>"
+        else:
+            username_text = "нет username"
+        
+        text = (
+            f"<b>Сообщение #{msg_id}</b>\n"
+            f"Статус: {status_text}\n"
+            f"От: {first_name} {username_text}\n"
+            f"ID: {user_id}\n"
+            f"📞 {phone if phone else 'не указан'}\n"
+            f"📅 {created}\n\n"
+            f"📝 <b>Вопрос:</b>\n{user_msg}\n"
+        )
+        
+        if reply:
+            text += f"\n✅ <b>Ответ:</b>\n{reply}"
+        
+        # Кнопки для ответа
+        keyboard = []
+        if username and username != "неизвестно" and username != "нет username":
+            clean_username = username.replace('@', '')
+            keyboard.append([InlineKeyboardButton("💬 Ответить", url=f"https://t.me/{clean_username}")])
+        
+        # Кнопка "Отметить как прочитано"
+        if status == 'new':
+            keyboard.append([InlineKeyboardButton("✅ Отметить как прочитано", callback_data=f'mark_read_{msg_id}')])
+        
+        if i == 0:
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None)
+        else:
+            await query.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None)
+    
+    await query.message.reply_text(
+        f"Показаны первые 5 сообщений из {len(messages)}",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
+        ]])
+    )
+
+async def admin_prices_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню управления ценами"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    text = (
+        "💰 <b>УПРАВЛЕНИЕ ЦЕНАМИ</b>\n\n"
+        f"Текущие цены:\n"
+        f"• 🟢 1 мешок: {admin_data['prices']['1']} ₽ (за один мешок)\n"
+        f"• 🟡 2 мешка: {admin_data['prices']['2']} ₽ (за два мешка, общая цена)\n"
+        f"• 🔴 3+ мешков: {admin_data['prices']['3+']} ₽ (фиксированная цена за весь объём)\n\n"
+        "Выберите, что хотите изменить:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("✏️ 1 мешок", callback_data='edit_price_1')],
+        [InlineKeyboardButton("✏️ 2 мешка", callback_data='edit_price_2')],
+        [InlineKeyboardButton("✏️ 3+ мешков", callback_data='edit_price_3')],
+        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def edit_price_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало редактирования цены"""
+    query = update.callback_query
+    await query.answer()
+    
+    price_type = query.data.replace('edit_price_', '')
+    context.user_data['editing_price'] = price_type
+    
+    price_names = {'1': '1 мешок', '2': '2 мешка', '3': '3+ мешков'}
+    
+    await query.edit_message_text(
+        f"✏️ Введите новую цену для <b>{price_names[price_type]}</b> (только число):",
+        parse_mode='HTML'
+    )
+    return 100  # EDITING_PRICE
+
+async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Установка новой цены"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    try:
+        new_price = int(update.message.text)
+        price_type = context.user_data.get('editing_price')
+        
+        if price_type:
+            admin_data['prices'][price_type] = new_price
+            
+            await update.message.reply_text(
+                f"✅ Цена успешно изменена!\n\n"
+                f"Новые цены:\n"
+                f"• 1 мешок: {admin_data['prices']['1']} ₽\n"
+                f"• 2 мешка: {admin_data['prices']['2']} ₽\n"
+                f"• 3+ мешков: {admin_data['prices']['3+']} ₽/мешок",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ В админку", callback_data='admin')
+                ]])
+            )
+    except ValueError:
+        await update.message.reply_text("❌ Введите число!")
+        return 100  # EDITING_PRICE
+    
+    return ConversationHandler.END
+
+async def admin_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт данных (заглушка для будущего функционала)"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = (
+        "📈 <b>ЭКСПОРТ ДАННЫХ</b>\n\n"
+        "Функция находится в разработке.\n\n"
+        "В будущем здесь можно будет экспортировать:\n"
+        "• Заказы в Excel\n"
+        "• Статистику в CSV\n"
+        "• Отчёты по дням/неделям/месяцам"
+    )
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Настройки админки (заглушка для будущего функционала)"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = (
+        "⚙️ <b>НАСТРОЙКИ</b>\n\n"
+        "Функция находится в разработке.\n\n"
+        "В будущем здесь можно будет настраивать:\n"
+        "• Уведомления\n"
+        "• Права администраторов\n"
+        "• Параметры заказов"
+    )
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Для обратной совместимости
+async def admin_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Старая функция черного списка (заглушка)"""
+    await admin_blacklist_menu(update, context)
