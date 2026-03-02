@@ -1,6 +1,6 @@
 # app.py - точка входа для Render.com
 import os
-import sys
+import asyncio
 import threading
 import logging
 from flask import Flask
@@ -24,11 +24,18 @@ def health():
     return "OK", 200
 
 def run_bot():
-    """Запускает Telegram бота в отдельном потоке"""
+    """Запускает Telegram бота в отдельном потоке с правильным event loop"""
     try:
         logger.info("🚀 Запуск Telegram бота...")
+        
+        # Создаем новый event loop для этого потока
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Импортируем и запускаем main функцию бота
         from bot import main
         main()
+        
     except Exception as e:
         logger.error(f"❌ Ошибка бота: {e}")
 
@@ -39,6 +46,6 @@ if __name__ == "__main__":
     logger.info("✅ Бот запущен в фоновом потоке")
     
     # Запускаем Flask сервер
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     logger.info(f"🌐 Flask сервер запущен на порту {port}")
     app.run(host="0.0.0.0", port=port)
