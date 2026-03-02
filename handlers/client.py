@@ -423,6 +423,20 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
     user_id = query.from_user.id
     payment_method = query.data.replace('pay_', '')
     
+    # Если выбрана онлайн-оплата - показываем заглушку
+    if payment_method == 'yookassa':
+        await query.edit_message_text(
+            "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
+            "🔧 Мы работаем над подключением этого способа.\n"
+            "Пожалуйста, выберите другой способ оплаты:\n"
+            "• 💵 Наличные курьеру\n"
+            "• 💳 Перевод на карту курьера\n\n"
+            "Приносим извинения за неудобства!",
+            parse_mode='HTML',
+            reply_markup=get_payment_keyboard()
+        )
+        return PAYMENT_METHOD
+    
     user_data[user_id]['payment_method'] = payment_method
     
     payment_names = {
