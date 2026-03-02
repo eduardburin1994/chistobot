@@ -1,0 +1,25 @@
+# constants.py
+# Состояния для разговора
+(WELCOME, NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, 
+ DATE, TIME, BAGS, PAYMENT_METHOD, CONFIRM_CANCEL, EDIT_PRICE, ADD_ADMIN, STATS_CUSTOM, 
+ BLACKLIST_ADD, MY_ORDERS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, 
+ NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME,
+ SELECT_FAVORITE, ORDER_DETAIL, MANAGE_FAVORITES, EDIT_FAVORITE_NAME,
+ SELECT_ADDRESS, BROADCAST_MESSAGE, TEST_MODE) = range(33)
+
+# Интервалы времени
+TIME_SLOTS = [
+    "08:00-10:00",
+    "10:00-12:00", 
+    "12:00-14:00",
+    "14:00-16:00",
+    "16:00-18:00",
+    "18:00-20:00"
+]
+
+# Способы оплаты
+PAYMENT_METHODS = {
+    'cash': '💵 Наличные курьеру',
+    'card': '💳 Перевод на карту курьера',
+    'yookassa': '💰 Онлайн-оплата (ЮKassa)'
+}
