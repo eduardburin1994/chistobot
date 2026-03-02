@@ -168,6 +168,28 @@ def get_user_by_id(user_id):
 if __name__ != '__main__':
     init_db()
     print("✅ База данных инициализирована при импорте")
+
+def add_user(user_id, username, first_name, last_name):
+    """Добавление нового пользователя"""
+    conn = get_connection()
+    if not conn:
+        print(f"❌ Не удалось подключиться к БД для добавления пользователя {user_id}")
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO users (user_id, username, first_name, last_name, registered_date)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO NOTHING
+        ''', (user_id, username, first_name, last_name, datetime.datetime.now()))
+        conn.commit()
+        print(f"✅ Пользователь {user_id} добавлен в БД")
+    except Exception as e:
+        print(f"❌ Ошибка добавления пользователя {user_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
 # Добавь в requirements.txt: psycopg2-binary==2.9.9
 
 # Остальные функции (add_user, create_order и т.д.) нужно будет тоже адаптировать,
