@@ -1,5 +1,6 @@
 # bot.py
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 from config import TOKEN, admin_data
@@ -235,7 +236,9 @@ async def button_handler(update: Update, context):
     
     return ConversationHandler.END
 
-def main():
+async def main():
+    """Асинхронная функция запуска бота"""
+    # Создаем приложение
     app = Application.builder().token(TOKEN).build()
     
     # Единый ConversationHandler для всего процесса заказа
@@ -342,8 +345,16 @@ def main():
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     
-    print("🚀 Бот ЧистоBOT с супер-админкой, уведомлениями, оплатой и тестовым режимом запущен...")
-    app.run_polling()
+    print("🚀 Бот ЧистоBOT запущен на Render...")
+    
+    # Запускаем бота (асинхронно)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    
+    # Держим бота запущенным
+    while True:
+        await asyncio.sleep(1)
 
-if __name__ == '__main__':
-    main()
+# Убираем блок if __name__ == '__main__' - он больше не нужен
+# так как запуск будет через app.py
