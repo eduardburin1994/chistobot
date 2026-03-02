@@ -323,10 +323,8 @@ async def get_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return DATE
 
-
-
 async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик выбора даты - показываем только свободное время с учётом истекших слотов"""
+    """Обработчик выбора даты - показываем только свободное время с учётом истекших слотов и рабочего времени"""
     query = update.callback_query
     await query.answer()
     
@@ -343,7 +341,7 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]['order_date'] = selected_date
     print(f"📅 Выбрана дата: {selected_date}")
     
-    # Получаем доступные слоты с учётом истекших
+    # Получаем доступные слоты с учётом истекших и рабочего времени
     import database as db
     available_slots, slot_info = db.get_available_slots(selected_date)
     
@@ -445,7 +443,7 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     await query.edit_message_text(
         f"💳 Выбран способ оплаты: {payment_names[payment_method]}\n\n"
-        f"🛍 Введите количество мешков (от 1 до 4, суммарный вес до 15 кг):"
+        f"🛍 Введите количество пакетов с мусором (от 1 до 4, суммарный вес до 15 кг):"
     )
     return BAGS
 
@@ -458,7 +456,7 @@ async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Возвращаемся к выбору времени
     await query.edit_message_text(
-        f"🛍 Укажите количество мешков (от 1 до 4, до 15 кг суммарно)\n"
+        f"🛍 Укажите количество пакетов (от 1 до 4, до 15 кг суммарно)\n"
         f"📅 {user_data[user_id]['order_date']} {user_data[user_id]['order_time']}",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Назад к времени", callback_data='back_to_dates')
@@ -467,7 +465,7 @@ async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return BAGS
 
 async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получаем количество мешков и сохраняем заказ в БД"""
+    """Получаем количество пакетов и сохраняем заказ в БД"""
     user_id = update.effective_user.id
     
     if user_id not in user_data:
@@ -485,7 +483,7 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Проверка на минимальное количество
         if bags < 1:
             await update.message.reply_text(
-                "❌ Введите число больше 0. Количество мешков должно быть не менее 1:"
+                "❌ Введите число больше 0. Количество пакетов должно быть не менее 1:"
             )
             return BAGS
         
@@ -497,14 +495,14 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
             
             await update.message.reply_text(
-                f"❌ <b>Слишком много мешков!</b>\n\n"
-                f"Вы указали: {bags} мешков\n\n"
-                f"🚫 Максимальное количество мешков для одного заказа: <b>4</b>\n"
+                f"❌ <b>Слишком много пакетов!</b>\n\n"
+                f"Вы указали: {bags} пакетов\n\n"
+                f"🚫 Максимальное количество пакетов для одного заказа: <b>4</b>\n"
                 f"📦 Причины:\n"
                 f"• Ограничение по весу (до 15 кг суммарно)\n"
                 f"• Удобство транспортировки\n"
                 f"• Качество обслуживания\n\n"
-                f"Пожалуйста, укажите количество мешков от 1 до 4:",
+                f"Пожалуйста, укажите количество пакетов от 1 до 4:",
                 parse_mode='HTML',
                 reply_markup=keyboard
             )
@@ -593,11 +591,11 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Текст о цене
         if bags == 1:
-            price_text = f"💰 {price} ₽ (за 1 мешок)"
+            price_text = f"💰 {price} ₽ (за 1 пакет)"
         elif bags == 2:
-            price_text = f"💰 {price} ₽ (за 2 мешка)"
+            price_text = f"💰 {price} ₽ (за 2 пакета)"
         else:
-            price_text = f"💰 {price} ₽ (фиксированная цена за {bags} мешков)"
+            price_text = f"💰 {price} ₽ (фиксированная цена за {bags} пакетов)"
         
         # Текст об оплате
         payment_names = {
@@ -620,10 +618,13 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📞 {user_data[user_id]['phone']}\n"
             f"📍 {full_address}\n"
             f"📅 {user_data[user_id]['order_date']} {user_data[user_id]['order_time']}\n"
-            f"🛍 {bags} мешков\n"
+            f"🛍 {bags} пакетов\n"
             f"{price_text}\n"
             f"{payment_text}\n\n"
-            f"Мы свяжемся с вами для подтверждения.",
+            f"🚶‍♂️ <b>Что дальше?</b>\n"
+            f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
+            f"Вам останется только открыть дверь!\n"
+            f"Подтверждение заказа придёт отдельно.",
             parse_mode='HTML',
             reply_markup=get_main_keyboard(user_id in admin_data['admins'])
         )
@@ -643,7 +644,7 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except ValueError:
         await update.message.reply_text(
-            "❌ Введите число! Количество мешков должно быть от 1 до 4:"
+            "❌ Введите число! Количество пакетов должно быть от 1 до 4:"
         )
         return BAGS
     except Exception as e:
@@ -1186,7 +1187,7 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детальный просмотр истории заказов с новыми статусами"""
+    """Детальный просмотр истории заказов"""
     query = update.callback_query
     await query.answer()
     
@@ -1241,7 +1242,7 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детальный просмотр конкретного заказа с новыми статусами"""
+    """Детальный просмотр конкретного заказа"""
     query = update.callback_query
     await query.answer()
     
