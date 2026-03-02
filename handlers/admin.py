@@ -419,33 +419,33 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(f"✅ Заказ #{order_id} выполнен, слот освобождён")
     
     elif data.startswith('confirm_'):
-    order_id = int(data.replace('confirm_', ''))
-    
-    try:
-        # Подтверждаем заказ
-        db.confirm_order(order_id)
+        order_id = int(data.replace('confirm_', ''))
         
-        order = db.get_order_by_id(order_id)
-        if order:
-            client_id = order[1]
-            try:
-                # Уведомление клиенту о подтверждении
-                await context.bot.send_message(
-                    chat_id=client_id,
-                    text=f"✅ <b>Ваш заказ #{order_id} подтверждён!</b>\n\n"
-                         f"Ожидайте курьера в назначенное время.\n"
-                         f"Спасибо, что воспользовались нашим сервисом!",
-                    parse_mode='HTML'
-                )
-                print(f"✅ Уведомление о подтверждении отправлено клиенту {client_id}")
-            except Exception as e:
-                print(f"❌ Не удалось уведомить клиента {client_id}: {e}")
-        
-        await query.edit_message_text(f"✅ Заказ #{order_id} подтверждён")
-        
-    except Exception as e:
-        print(f"❌ Ошибка при подтверждении заказа {order_id}: {e}")
-        await query.edit_message_text(f"❌ Ошибка при подтверждении заказа #{order_id}")
+        try:
+            # Подтверждаем заказ
+            db.confirm_order(order_id)
+            
+            order = db.get_order_by_id(order_id)
+            if order:
+                client_id = order[1]
+                try:
+                    # Уведомление клиенту о подтверждении
+                    await context.bot.send_message(
+                        chat_id=client_id,
+                        text=f"✅ <b>Ваш заказ #{order_id} подтверждён!</b>\n\n"
+                             f"Ожидайте курьера в назначенное время.\n"
+                             f"Спасибо, что воспользовались нашим сервисом!",
+                        parse_mode='HTML'
+                    )
+                    print(f"✅ Уведомление о подтверждении отправлено клиенту {client_id}")
+                except Exception as e:
+                    print(f"❌ Не удалось уведомить клиента {client_id}: {e}")
+            
+            await query.edit_message_text(f"✅ Заказ #{order_id} подтверждён")
+            
+        except Exception as e:
+            print(f"❌ Ошибка при подтверждении заказа {order_id}: {e}")
+            await query.edit_message_text(f"❌ Ошибка при подтверждении заказа #{order_id}")
     
     elif data.startswith('cancel_'):
         order_id = int(data.replace('cancel_', ''))
