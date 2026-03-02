@@ -145,6 +145,8 @@ def init_db():
     conn.close()
     print("✅ Таблицы PostgreSQL созданы или уже существуют")
 
+# =============== ФУНКЦИИ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ===============
+
 def get_user_by_id(user_id):
     """Получение информации о пользователе по ID"""
     conn = get_connection()
@@ -152,22 +154,20 @@ def get_user_by_id(user_id):
         return None
     
     cur = conn.cursor()
-    cur.execute('''
-        SELECT user_id, username, first_name, last_name, phone, street_address, 
-               entrance, floor, apartment, intercom, registered_date 
-        FROM users WHERE user_id = %s
-    ''', (user_id,))
-    
-    # Для PostgreSQL используем %s вместо ?
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
-    return user
-
-# Инициализация базы данных при импорте модуля
-if __name__ != '__main__':
-    init_db()
-    print("✅ База данных инициализирована при импорте")
+    try:
+        cur.execute('''
+            SELECT user_id, username, first_name, last_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, registered_date 
+            FROM users WHERE user_id = %s
+        ''', (user_id,))
+        user = cur.fetchone()
+        return user
+    except Exception as e:
+        print(f"❌ Ошибка получения пользователя {user_id}: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
 
 def add_user(user_id, username, first_name, last_name):
     """Добавление нового пользователя"""
@@ -190,7 +190,624 @@ def add_user(user_id, username, first_name, last_name):
     finally:
         cur.close()
         conn.close()
-# Добавь в requirements.txt: psycopg2-binary==2.9.9
 
-# Остальные функции (add_user, create_order и т.д.) нужно будет тоже адаптировать,
-# но для начала база уже создаст таблицы
+def update_user_username(user_id, username):
+    """Обновление username пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('UPDATE users SET username = %s WHERE user_id = %s', (username, user_id))
+        conn.commit()
+        print(f"✅ Username пользователя {user_id} обновлён на @{username}")
+    except Exception as e:
+        print(f"❌ Ошибка обновления username {user_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def update_user_phone(user_id, phone):
+    """Обновление телефона пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('UPDATE users SET phone = %s WHERE user_id = %s', (phone, user_id))
+        conn.commit()
+        print(f"✅ Телефон пользователя {user_id} обновлён")
+    except Exception as e:
+        print(f"❌ Ошибка обновления телефона {user_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def save_user_details(user_id, phone, street_address, entrance, floor, apartment, intercom):
+    """Сохранение всех данных пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE users 
+            SET phone = %s, street_address = %s, entrance = %s, floor = %s, apartment = %s, intercom = %s
+            WHERE user_id = %s
+        ''', (phone, street_address, entrance, floor, apartment, intercom, user_id))
+        conn.commit()
+        print(f"✅ Данные пользователя {user_id} сохранены")
+    except Exception as e:
+        print(f"❌ Ошибка сохранения данных {user_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def update_user_address(user_id, street_address, entrance, floor, apartment, intercom):
+    """Обновление адреса пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE users 
+            SET street_address = %s, entrance = %s, floor = %s, apartment = %s, intercom = %s
+            WHERE user_id = %s
+        ''', (street_address, entrance, floor, apartment, intercom, user_id))
+        conn.commit()
+        print(f"✅ Адрес пользователя {user_id} обновлён")
+    except Exception as e:
+        print(f"❌ Ошибка обновления адреса {user_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_username_by_id(user_id):
+    """Получение username по ID"""
+    conn = get_connection()
+    if not conn:
+        return "неизвестно"
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT username FROM users WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
+        return result[0] if result else "неизвестно"
+    except Exception as e:
+        print(f"❌ Ошибка получения username {user_id}: {e}")
+        return "неизвестно"
+    finally:
+        cur.close()
+        conn.close()
+
+def get_all_users():
+    """Получение всех пользователей"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT user_id, username, first_name, last_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, registered_date 
+            FROM users ORDER BY registered_date DESC
+        ''')
+        users = cur.fetchall()
+        return users
+    except Exception as e:
+        print(f"❌ Ошибка получения всех пользователей: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+# =============== ФУНКЦИИ ДЛЯ ИЗБРАННЫХ АДРЕСОВ ===============
+
+def get_user_favorite_addresses(user_id):
+    """Получение всех избранных адресов пользователя"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT address_id, address_name, street_address, entrance, floor, apartment, intercom, created_date
+            FROM favorite_addresses WHERE user_id = %s ORDER BY created_date DESC
+        ''', (user_id,))
+        addresses = cur.fetchall()
+        return addresses
+    except Exception as e:
+        print(f"❌ Ошибка получения избранных адресов {user_id}: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_favorite_address(address_id):
+    """Получение конкретного избранного адреса"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT address_id, user_id, address_name, street_address, entrance, floor, apartment, intercom, created_date
+            FROM favorite_addresses WHERE address_id = %s
+        ''', (address_id,))
+        address = cur.fetchone()
+        return address
+    except Exception as e:
+        print(f"❌ Ошибка получения адреса {address_id}: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def save_favorite_address(user_id, address_name, street_address, entrance, floor, apartment, intercom):
+    """Сохранение избранного адреса"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO favorite_addresses 
+            (user_id, address_name, street_address, entrance, floor, apartment, intercom, created_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING address_id
+        ''', (user_id, address_name, street_address, entrance, floor, apartment, intercom, datetime.datetime.now()))
+        address_id = cur.fetchone()[0]
+        conn.commit()
+        print(f"✅ Избранный адрес #{address_id} сохранён для пользователя {user_id}")
+        return address_id
+    except Exception as e:
+        print(f"❌ Ошибка сохранения избранного адреса: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def delete_favorite_address(address_id):
+    """Удаление избранного адреса"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('DELETE FROM favorite_addresses WHERE address_id = %s', (address_id,))
+        conn.commit()
+        print(f"✅ Избранный адрес #{address_id} удалён")
+    except Exception as e:
+        print(f"❌ Ошибка удаления адреса {address_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+# =============== ФУНКЦИИ ДЛЯ ЗАКАЗОВ ===============
+
+def get_user_orders(user_id):
+    """Получение заказов пользователя"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT order_id, user_id, client_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, order_date, order_time, 
+                   bags_count, price, status, created_at 
+            FROM orders WHERE user_id = %s ORDER BY created_at DESC
+        ''', (user_id,))
+        orders = cur.fetchall()
+        return orders
+    except Exception as e:
+        print(f"❌ Ошибка получения заказов {user_id}: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_order_by_id(order_id):
+    """Получение заказа по ID"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT order_id, user_id, client_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, order_date, order_time, 
+                   bags_count, price, status, created_at 
+            FROM orders WHERE order_id = %s
+        ''', (order_id,))
+        order = cur.fetchone()
+        return order
+    except Exception as e:
+        print(f"❌ Ошибка получения заказа {order_id}: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_all_orders():
+    """Получение всех заказов"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT order_id, user_id, client_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, order_date, order_time, 
+                   bags_count, price, status, created_at 
+            FROM orders ORDER BY created_at DESC
+        ''')
+        orders = cur.fetchall()
+        return orders
+    except Exception as e:
+        print(f"❌ Ошибка получения всех заказов: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def create_order(user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
+                 order_date, order_time, bags_count, price, payment_method='cash'):
+    """Создание нового заказа"""
+    conn = get_connection()
+    if not conn:
+        return False, "Ошибка подключения к БД"
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем, свободен ли слот
+        cur.execute(
+            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
+            (order_date, order_time)
+        )
+        count = cur.fetchone()[0]
+        
+        if count >= 3:
+            return False, "На это время уже 3 заказа. Пожалуйста, выберите другое время."
+        
+        # Создаём заказ
+        cur.execute('''
+            INSERT INTO orders 
+            (user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
+             order_date, order_time, bags_count, price, payment_method, payment_status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING order_id
+        ''', (user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
+              order_date, order_time, bags_count, price, payment_method, 'pending', datetime.datetime.now()))
+        
+        order_id = cur.fetchone()[0]
+        
+        # Занимаем слот
+        cur.execute('''
+            INSERT INTO busy_slots (slot_date, slot_time, order_id)
+            VALUES (%s, %s, %s)
+        ''', (order_date, order_time, order_id))
+        
+        conn.commit()
+        print(f"✅ Заказ #{order_id} успешно создан для пользователя {user_id}")
+        return order_id, "Успешно"
+        
+    except Exception as e:
+        print(f"❌ Ошибка при создании заказа: {e}")
+        conn.rollback()
+        return False, "Произошла ошибка. Пожалуйста, попробуйте ещё раз."
+    finally:
+        cur.close()
+        conn.close()
+
+def update_order_status(order_id, new_status):
+    """Обновление статуса заказа"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', (new_status, order_id))
+        conn.commit()
+        print(f"✅ Статус заказа #{order_id} изменён на {new_status}")
+    except Exception as e:
+        print(f"❌ Ошибка обновления статуса заказа {order_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def cancel_order(order_id):
+    """Отмена заказа - освобождаем место"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Удаляем слот
+        cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
+        # Обновляем статус заказа
+        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', ('cancelled', order_id))
+        conn.commit()
+        print(f"✅ Заказ #{order_id} отменён")
+    except Exception as e:
+        print(f"❌ Ошибка отмены заказа {order_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def is_time_slot_free(date, time_slot):
+    """Проверка, свободен ли временной слот (максимум 3 заказа)"""
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
+            (date, time_slot)
+        )
+        count = cur.fetchone()[0]
+        return count < 3
+    except Exception as e:
+        print(f"❌ Ошибка проверки слота: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def get_slot_availability(date, time_slot):
+    """Получить количество свободных мест на конкретное время"""
+    conn = get_connection()
+    if not conn:
+        return 0
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
+            (date, time_slot)
+        )
+        count = cur.fetchone()[0]
+        return 3 - count
+    except Exception as e:
+        print(f"❌ Ошибка получения доступности слота: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+# =============== ФУНКЦИИ ДЛЯ СООБЩЕНИЙ ===============
+
+def save_message(user_id, message_text):
+    """Сохранение сообщения от пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO messages (user_id, user_message, created_at, status)
+            VALUES (%s, %s, %s, 'new')
+            RETURNING message_id
+        ''', (user_id, message_text, datetime.datetime.now()))
+        message_id = cur.fetchone()[0]
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} сохранено от пользователя {user_id}")
+        return message_id
+    except Exception as e:
+        print(f"❌ Ошибка сохранения сообщения: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_all_messages():
+    """Получение всех сообщений"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT m.message_id, m.user_id, u.username, u.first_name, u.phone, 
+                   m.user_message, m.admin_reply, m.status, m.created_at
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            ORDER BY m.created_at DESC
+        ''')
+        messages = cur.fetchall()
+        return messages
+    except Exception as e:
+        print(f"❌ Ошибка получения сообщений: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def reply_to_message(message_id, reply_text):
+    """Ответ администратора на сообщение"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE messages 
+            SET admin_reply = %s, status = 'replied', replied_at = %s
+            WHERE message_id = %s
+        ''', (reply_text, datetime.datetime.now(), message_id))
+        conn.commit()
+        print(f"✅ Ответ на сообщение #{message_id} сохранён")
+    except Exception as e:
+        print(f"❌ Ошибка сохранения ответа: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+# =============== ФУНКЦИИ ДЛЯ ЧЁРНОГО СПИСКА ===============
+
+def add_to_blacklist(user_id, reason=""):
+    """Добавить пользователя в чёрный список"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO blacklist (user_id, reason, added_date, added_by)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE 
+            SET reason = EXCLUDED.reason, added_date = EXCLUDED.added_date
+        ''', (user_id, reason, datetime.datetime.now(), 0))
+        conn.commit()
+        print(f"✅ Пользователь {user_id} добавлен в чёрный список")
+    except Exception as e:
+        print(f"❌ Ошибка добавления в чёрный список: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def remove_from_blacklist(user_id):
+    """Удалить пользователя из чёрного списка"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('DELETE FROM blacklist WHERE user_id = %s', (user_id,))
+        conn.commit()
+        print(f"✅ Пользователь {user_id} удалён из чёрного списка")
+    except Exception as e:
+        print(f"❌ Ошибка удаления из чёрного списка: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_blacklist():
+    """Получить весь чёрный список"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT b.user_id, b.reason, b.added_date, u.username, u.first_name, u.phone
+            FROM blacklist b
+            LEFT JOIN users u ON b.user_id = u.user_id
+            ORDER BY b.added_date DESC
+        ''')
+        blacklist = cur.fetchall()
+        return blacklist
+    except Exception as e:
+        print(f"❌ Ошибка получения чёрного списка: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def is_user_blacklisted(user_id):
+    """Проверить, есть ли пользователь в чёрном списке"""
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT * FROM blacklist WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
+        return result is not None
+    except Exception as e:
+        print(f"❌ Ошибка проверки чёрного списка: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+# =============== ФУНКЦИИ ДЛЯ РАССЫЛОК ===============
+
+def save_broadcast(admin_id, message_text):
+    """Сохранить рассылку в историю"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO broadcasts (admin_id, message_text, sent_date, recipients_count)
+            VALUES (%s, %s, %s, %s)
+            RETURNING broadcast_id
+        ''', (admin_id, message_text, datetime.datetime.now(), 0))
+        broadcast_id = cur.fetchone()[0]
+        conn.commit()
+        return broadcast_id
+    except Exception as e:
+        print(f"❌ Ошибка сохранения рассылки: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def update_broadcast_count(broadcast_id, count):
+    """Обновить количество получателей"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('UPDATE broadcasts SET recipients_count = %s WHERE broadcast_id = %s', (count, broadcast_id))
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Ошибка обновления счётчика рассылки: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_all_broadcasts():
+    """Получить историю рассылок"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT broadcast_id, admin_id, message_text, sent_date, recipients_count
+            FROM broadcasts ORDER BY sent_date DESC
+        ''')
+        broadcasts = cur.fetchall()
+        return broadcasts
+    except Exception as e:
+        print(f"❌ Ошибка получения истории рассылок: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+# Инициализация базы данных при импорте модуля
+if __name__ != '__main__':
+    init_db()
+    print("✅ База данных инициализирована при импорте")
