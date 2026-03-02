@@ -421,6 +421,12 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     
     user_id = query.from_user.id
+    
+    # ВАЖНО: Проверяем, есть ли данные пользователя
+    if user_id not in user_data:
+        print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
+        user_data[user_id] = {}
+    
     payment_method = query.data.replace('pay_', '')
     
     # Если выбрана онлайн-оплата - показываем заглушку
@@ -450,7 +456,6 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         f"🛍 Введите количество пакетов с мусором (от 1 до 4, суммарный вес до 15 кг):"
     )
     return BAGS
-
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к выбору времени"""
     query = update.callback_query
