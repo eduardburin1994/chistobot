@@ -238,6 +238,11 @@ async def button_handler(update: Update, context):
     return ConversationHandler.END
 
 async def main():
+    # Явная инициализация базы данных
+    import database as db
+    db.init_db()
+    print("🚀 База данных проверена")
+    
     """Асинхронная функция запуска бота"""
     # Создаем приложение
     app = Application.builder().token(TOKEN).build()
