@@ -1,6 +1,9 @@
 # bot.py
 import logging
 import asyncio
+import warnings
+from telegram.warnings import PTBUserWarning
+warnings.filterwarnings("ignore", message="Fetching updates got a asyncio.CancelledError")
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 from config import TOKEN, admin_data
