@@ -419,8 +419,9 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(f"✅ Заказ #{order_id} выполнен, слот освобождён")
     
     elif data.startswith('confirm_'):
-        order_id = int(data.replace('confirm_', ''))
-        
+    order_id = int(data.replace('confirm_', ''))
+    
+    try:
         # Подтверждаем заказ
         db.confirm_order(order_id)
         
@@ -441,6 +442,10 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 print(f"❌ Не удалось уведомить клиента {client_id}: {e}")
         
         await query.edit_message_text(f"✅ Заказ #{order_id} подтверждён")
+        
+    except Exception as e:
+        print(f"❌ Ошибка при подтверждении заказа {order_id}: {e}")
+        await query.edit_message_text(f"❌ Ошибка при подтверждении заказа #{order_id}")
     
     elif data.startswith('cancel_'):
         order_id = int(data.replace('cancel_', ''))
