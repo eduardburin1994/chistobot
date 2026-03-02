@@ -50,7 +50,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
     
-    # Кнопки для ответа
+    # Inline-кнопки для ответа на приветствие
     keyboard = [
         [
             InlineKeyboardButton("✅ ДА, давай!", callback_data='welcome_yes'),
@@ -63,6 +63,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML'
     )
+    
+    # ДОБАВЛЯЕМ ПОСТОЯННУЮ REPLY-КЛАВИАТУРУ
+    from keyboards.reply_keyboards import get_main_reply_keyboard
+    is_admin = user.id in admin_data['admins']
+    await update.message.reply_text(
+        "👇 Используйте кнопки внизу для быстрого доступа к функциям:",
+        reply_markup=get_main_reply_keyboard(is_admin)
+    )
+    
     return WELCOME
 
 async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
