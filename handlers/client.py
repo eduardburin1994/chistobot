@@ -1265,9 +1265,10 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔍 Подробнее о заказе", callback_data='order_detail_select')],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
     ]
-    
+
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-    async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальный просмотр конкретного заказа"""
     query = update.callback_query
     await query.answer()
