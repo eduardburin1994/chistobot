@@ -145,7 +145,7 @@ def init_db():
     conn.close()
     print("✅ Таблицы PostgreSQL созданы или уже существуют")
 
-# =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ ===============
+# =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ И ВРЕМЕНЕМ ===============
 
 def parse_time_slot(slot_time):
     """Парсит временной слот и возвращает время начала и конца"""
@@ -153,6 +153,21 @@ def parse_time_slot(slot_time):
     start_hour, start_minute = map(int, start_str.split(':'))
     end_hour, end_minute = map(int, end_str.split(':'))
     return (start_hour, start_minute), (end_hour, end_minute)
+
+def is_within_working_hours(slot_time):
+    """Проверяет, находится ли слот в рабочем времени"""
+    from config import WORK_HOURS
+    
+    try:
+        # Берём начало слота
+        start_time_str = slot_time.split('-')[0]
+        start_hour = int(start_time_str.split(':')[0])
+        
+        # Проверяем, что час начала в пределах рабочего времени
+        return WORK_HOURS['start'] <= start_hour < WORK_HOURS['end']
+    except Exception as e:
+        print(f"❌ Ошибка проверки рабочего времени: {e}")
+        return False
 
 def is_slot_expired(slot_date, slot_time):
     """
@@ -185,7 +200,7 @@ def is_slot_expired(slot_date, slot_time):
 def get_available_slots(date):
     """
     Возвращает список доступных слотов для указанной даты
-    с учётом истекших слотов
+    с учётом истекших слотов и рабочего времени
     """
     from constants import TIME_SLOTS
     
@@ -199,6 +214,10 @@ def get_available_slots(date):
     
     try:
         for slot in TIME_SLOTS:
+            # Проверяем рабочие часы
+            if not is_within_working_hours(slot):
+                continue
+            
             # Проверяем, истёк ли слот
             if is_slot_expired(date, slot):
                 continue  # Пропускаем истекшие слоты
@@ -225,7 +244,11 @@ def get_available_slots(date):
 
 def is_time_slot_free(date, time_slot):
     """Проверка, свободен ли временной слот (максимум 3 заказа)"""
-    # Сначала проверяем, не истёк ли слот
+    # Сначала проверяем рабочие часы
+    if not is_within_working_hours(time_slot):
+        return False
+    
+    # Проверяем, не истёк ли слот
     if is_slot_expired(date, time_slot):
         return False
     
@@ -250,8 +273,8 @@ def is_time_slot_free(date, time_slot):
 
 def get_slot_availability(date, time_slot):
     """Получить количество свободных мест на конкретное время"""
-    # Если слот истёк, возвращаем 0
-    if is_slot_expired(date, time_slot):
+    # Если слот вне рабочего времени или истёк, возвращаем 0
+    if not is_within_working_hours(time_slot) or is_slot_expired(date, time_slot):
         return 0
     
     conn = get_connection()
@@ -595,6 +618,10 @@ def get_all_orders():
 def create_order(user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
                  order_date, order_time, bags_count, price, payment_method='cash'):
     """Создание нового заказа"""
+    # Проверяем рабочее время
+    if not is_within_working_hours(order_time):
+        return False, "Это время находится вне рабочего времени бота (10:00-22:00)."
+    
     # Проверяем, не истёк ли слот
     if is_slot_expired(order_date, order_time):
         return False, "Это время уже недоступно для заказа (прошло более 1 часа 15 минут с начала слота)."
