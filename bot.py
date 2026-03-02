@@ -237,13 +237,18 @@ async def button_handler(update: Update, context):
     
     return ConversationHandler.END
 
-async def main():
+async def main(set_webhook=True):
+    """Асинхронная функция запуска бота
+    
+    Args:
+        set_webhook: если True - запускает polling (для локальной разработки)
+                     если False - только инициализирует и возвращает app (для webhook)
+    """
     # Явная инициализация базы данных
     import database as db
     db.init_db()
     print("🚀 База данных проверена")
     
-    """Асинхронная функция запуска бота"""
     # Создаем приложение
     app = Application.builder().token(TOKEN).build()
     
@@ -360,13 +365,19 @@ async def main():
     # Добавляем команду отмены
     app.add_handler(CommandHandler('cancel', cancel_command))
     
-    print("🚀 Бот ЧистоBOT запущен на Render...")
-    
-    # Запускаем бота (асинхронно)
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    
-    # Держим бота запущенным
-    while True:
-        await asyncio.sleep(1)
+    if set_webhook:
+        # Режим polling (для локальной разработки)
+        print("🚀 Бот ЧистоBOT запущен в режиме polling...")
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        
+        # Держим бота запущенным
+        while True:
+            await asyncio.sleep(1)
+    else:
+        # Режим webhook (только инициализация)
+        print("🚀 Бот ЧистоBOT инициализирован для webhook")
+        await app.initialize()
+        await app.start()
+        return app
