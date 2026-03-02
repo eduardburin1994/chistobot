@@ -145,6 +145,24 @@ def init_db():
     conn.close()
     print("✅ Таблицы PostgreSQL созданы или уже существуют")
 
+def get_user_by_id(user_id):
+    """Получение информации о пользователе по ID"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT user_id, username, first_name, last_name, phone, street_address, 
+               entrance, floor, apartment, intercom, registered_date 
+        FROM users WHERE user_id = %s
+    ''', (user_id,))
+    
+    # Для PostgreSQL используем %s вместо ?
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    return user
 # Добавь в requirements.txt: psycopg2-binary==2.9.9
 
 # Остальные функции (add_user, create_order и т.д.) нужно будет тоже адаптировать,
