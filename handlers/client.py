@@ -326,7 +326,7 @@ async def get_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик выбора даты - показываем только свободное время"""
+    """Обработчик выбора даты - показываем только свободное время с учётом истекших слотов"""
     query = update.callback_query
     await query.answer()
     
@@ -343,44 +343,16 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]['order_date'] = selected_date
     print(f"📅 Выбрана дата: {selected_date}")
     
-    # Получаем ВСЕ возможные слоты времени
-    all_slots = TIME_SLOTS.copy()
-    print(f"📅 Все слоты: {all_slots}")
-    
-    # Проверяем каждый слот - свободен ли (менее 3 заказов)
+    # Получаем доступные слоты с учётом истекших
     import database as db
-    import sqlite3
+    available_slots, slot_info = db.get_available_slots(selected_date)
     
-    available_slots = []
-    slot_info = {}
-    
-    # Создаем отдельное соединение для проверки
-    conn = sqlite3.connect('chistobot.db')
-    cursor = conn.cursor()
-    
-    print(f"📊 Проверка слотов для даты {selected_date}:")
-    
-    for slot in all_slots:
-        cursor.execute(
-            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = ? AND slot_time = ?', 
-            (selected_date, slot)
-        )
-        count = cursor.fetchone()[0]
-        free_places = 3 - count
-        print(f"  • {slot}: {count} заказов, свободно {free_places} мест")
-        
-        if free_places > 0:
-            available_slots.append(slot)
-            slot_info[slot] = free_places
-    
-    conn.close()
-    
-    print(f"📅 Доступные слоты: {available_slots}")
+    print(f"📅 Доступные слоты после фильтрации: {available_slots}")
     
     # Создаем клавиатуру только со свободными слотами
     time_keyboard = []
     for slot in available_slots:
-        free = slot_info[slot]
+        free = slot_info.get(slot, 0)
         if free == 3:
             button_text = f"{slot} (🔵 3 места)"
         elif free == 2:
@@ -397,7 +369,7 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"❌ Нет доступных слотов на {selected_date}")
         keyboard = create_date_keyboard()
         await query.edit_message_text(
-            "❌ На эту дату нет свободного времени.\n"
+            "❌ На эту дату нет доступного времени.\n"
             "Пожалуйста, выберите другую дату:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -517,7 +489,7 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return BAGS
         
-        # НОВОЕ: Проверка на максимальное количество (не более 4)
+        # Проверка на максимальное количество (не более 4)
         if bags > 4:
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("✏️ Ввести заново", callback_data='back_to_bags')],
@@ -1214,7 +1186,7 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детальный просмотр истории заказов"""
+    """Детальный просмотр истории заказов с новыми статусами"""
     query = update.callback_query
     await query.answer()
     
@@ -1265,11 +1237,11 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔍 Подробнее о заказе", callback_data='order_detail_select')],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
     ]
-
+    
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детальный просмотр конкретного заказа"""
+    """Детальный просмотр конкретного заказа с новыми статусами"""
     query = update.callback_query
     await query.answer()
     
@@ -1291,7 +1263,7 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
     
     status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+    status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
     
     # Формируем адрес
     full_address = street
