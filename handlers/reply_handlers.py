@@ -1,9 +1,20 @@
 # handlers/reply_handlers.py
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup  # ВАЖНО: добавил InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from config import admin_data
 from keyboards.reply_keyboards import get_main_reply_keyboard, get_admin_reply_keyboard, hide_keyboard
 from constants import *
+
+# Вспомогательный класс для имитации callback_query
+class MockCallbackQuery:
+    def __init__(self, data, user_id, message):
+        self.data = data
+        self.from_user = type('', (), {})()
+        self.from_user.id = user_id
+        self.message = message
+    
+    async def answer(self):
+        pass
 
 async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -17,19 +28,8 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # =============== ГЛАВНОЕ МЕНЮ ===============
     if text == "📦 Заказать вынос":
-        # Создаём имитацию callback_query для вызова существующей функции
         from handlers.client import start_order
-        # Создаём объект, похожий на callback_query
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'new_order'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('new_order', user_id, update.message)
         await start_order(update, context)
         return
     
@@ -52,30 +52,13 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
     
     elif text == "📋 Мои заказы":
         from handlers.client import my_orders_detail
-        # Создаём имитацию callback_query
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'my_orders_detail'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('my_orders_detail', user_id, update.message)
         await my_orders_detail(update, context)
         return
     
     elif text == "⭐ Избранное":
         from handlers.client import favorite_addresses_menu
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'favorite_menu'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('favorite_menu', user_id, update.message)
         await favorite_addresses_menu(update, context)
         return
     
@@ -92,7 +75,7 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(
             contact_text,
             parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=InlineKeyboardMarkup(keyboard)  # Теперь работает!
         )
         return
     
@@ -111,17 +94,8 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # =============== АДМИН-МЕНЮ ===============
     elif text == "👑 Админ-панель" and is_admin:
-        # Показываем админ-панель
         from handlers.admin import admin_panel
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin', user_id, update.message)
         await admin_panel(update, context)
         # Меняем клавиатуру на админскую
         await update.message.reply_text(
@@ -132,118 +106,53 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
     
     elif text == "📦 Заказы" and is_admin:
         from handlers.admin import admin_orders
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_orders'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_orders', user_id, update.message)
         await admin_orders(update, context)
         return
     
     elif text == "👥 Клиенты" and is_admin:
         from handlers.admin import admin_clients
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_clients'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_clients', user_id, update.message)
         await admin_clients(update, context)
         return
     
     elif text == "💰 Цены" and is_admin:
         from handlers.admin import admin_prices_menu
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_prices_menu'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_prices_menu', user_id, update.message)
         await admin_prices_menu(update, context)
         return
     
     elif text == "⏰ Время работы" and is_admin:
         from handlers.admin import admin_working_hours
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_working_hours'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_working_hours', user_id, update.message)
         await admin_working_hours(update, context)
         return
     
     elif text == "📢 Рассылка" and is_admin:
         from handlers.admin import admin_broadcast
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_broadcast'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_broadcast', user_id, update.message)
         await admin_broadcast(update, context)
         return
     
     elif text == "🚫 Черный список" and is_admin:
         from handlers.admin import admin_blacklist_menu
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_blacklist'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_blacklist', user_id, update.message)
         await admin_blacklist_menu(update, context)
         return
     
     elif text == "📊 Статистика" and is_admin:
         from handlers.admin import admin_stats
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_stats'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_stats', user_id, update.message)
         await admin_stats(update, context)
         return
     
     elif text == "⚙️ Настройки" and is_admin:
         from handlers.admin import admin_settings
-        class MockQuery:
-            def __init__(self, user_id):
-                self.data = 'admin_settings'
-                self.from_user = type('', (), {})()
-                self.from_user.id = user_id
-                self.message = update.message
-            async def answer(self):
-                pass
-        query = MockQuery(user_id)
+        mock_query = MockCallbackQuery('admin_settings', user_id, update.message)
         await admin_settings(update, context)
         return
     
     elif text == "◀️ Назад в главное меню" and is_admin:
-        # Возврат в главное меню с обычной клавиатурой
         await update.message.reply_text(
             "👋 Главное меню:",
             reply_markup=get_main_reply_keyboard(is_admin)
