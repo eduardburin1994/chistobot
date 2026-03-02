@@ -269,15 +269,90 @@ async def main():
             PAYMENT_METHOD: [CallbackQueryHandler(payment_method_handler, pattern='^pay_')],
             BAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags)],
         },
-        fallbacks=[CommandHandler('cancel', cancel_command)]  # Теперь функция уже определена!
+        fallbacks=[CommandHandler('cancel', cancel_command)]
     )
     
-    # Далее идут все остальные ConversationHandler'ы...
-    # (остальной код без изменений, они уже используют cancel_command)
+    # ConversationHandler для избранных адресов (добавление)
+    favorite_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(favorite_add, pattern='^favorite_add$')],
+        states={
+            FAVORITE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, favorite_save)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
     
-    # ... (весь остальной код) ...
+    # ConversationHandler для редактирования избранных адресов
+    favorite_edit_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(edit_favorite_name, pattern='^edit_name_')
+        ],
+        states={
+            EDIT_FAVORITE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_favorite_name)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
     
-    # В конце добавляем команду отмены
+    # ConversationHandler для черного списка
+    blacklist_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$')],
+        states={
+            BLACKLIST_ADD: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_add_process)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ConversationHandler для рассылки
+    broadcast_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(broadcast_new, pattern='^broadcast_new$')],
+        states={
+            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ConversationHandler для сообщений в поддержку
+    support_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(support_start, pattern='^support_write$')],
+        states={
+            SUPPORT_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, support_message)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ConversationHandler для приветствия (ЭТО ГЛАВНЫЙ ОБРАБОТЧИК /start)
+    welcome_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            WELCOME: [CallbackQueryHandler(button_handler, pattern='^(welcome_yes|welcome_no)$')]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ConversationHandler для редактирования цен
+    price_edit_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(edit_price_start, pattern='^edit_price_')
+        ],
+        states={
+            EDITING_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_new_price)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
+    app.add_handler(welcome_handler)  # Сначала /start
+    app.add_handler(conv_handler)
+    app.add_handler(favorite_handler)
+    app.add_handler(favorite_edit_handler)
+    app.add_handler(blacklist_handler)
+    app.add_handler(broadcast_handler)
+    app.add_handler(support_handler)
+    app.add_handler(price_edit_handler)
+    app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
+    app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
+    
+    # Добавляем команду отмены
     app.add_handler(CommandHandler('cancel', cancel_command))
     
     print("🚀 Бот ЧистоBOT запущен на Render...")
