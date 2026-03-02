@@ -699,6 +699,9 @@ async def edit_start_hour(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    # Сохраняем тип редактирования
+    context.user_data['editing_working_hours'] = 'start'
+    
     await query.edit_message_text(
         "Введите новое время начала работы (час от 0 до 23):\n"
         "Например: 10"
@@ -709,6 +712,9 @@ async def edit_end_hour(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Изменение времени окончания работы"""
     query = update.callback_query
     await query.answer()
+    
+    # Сохраняем тип редактирования
+    context.user_data['editing_working_hours'] = 'end'
     
     await query.edit_message_text(
         "Введите новое время окончания работы (час от 1 до 24):\n"
@@ -727,6 +733,16 @@ async def set_working_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         hour = int(update.message.text)
         editing_type = context.user_data.get('editing_working_hours')
+        
+        if not editing_type:
+            # Если тип не сохранён, пытаемся определить по состоянию
+            if context.user_data.get('EDIT_WORKING_HOURS_START'):
+                editing_type = 'start'
+            elif context.user_data.get('EDIT_WORKING_HOURS_END'):
+                editing_type = 'end'
+            else:
+                await update.message.reply_text("❌ Ошибка: не удалось определить, что вы меняете")
+                return ConversationHandler.END
         
         from config import WORK_HOURS
         
@@ -757,7 +773,12 @@ async def set_working_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
     except ValueError:
         await update.message.reply_text("❌ Введите число!")
-        return editing_type == 'start' and EDIT_WORKING_HOURS_START or EDIT_WORKING_HOURS_END
+        # Определяем, какое состояние вернуть
+        editing_type = context.user_data.get('editing_working_hours')
+        if editing_type == 'start':
+            return EDIT_WORKING_HOURS_START
+        else:
+            return EDIT_WORKING_HOURS_END
     
     return ConversationHandler.END
 
