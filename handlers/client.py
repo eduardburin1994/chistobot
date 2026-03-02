@@ -1202,7 +1202,7 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = []
     for order in orders[:5]:
         order_id, _, _, _, _, date, time, bags, price, status, _ = order
-        status_emoji = {'new': '🆕', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
         button_text = f"{status_emoji} #{order_id} от {date} {time} ({bags} меш.)"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f'order_detail_{order_id}')])
     
@@ -1235,8 +1235,8 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, order in enumerate(orders[:3]):
         order_id, _, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
         
-        status_emoji = {'new': '🆕', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-        status_text = {'new': 'Активен', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
         
         # Формируем адрес
         full_address = street
@@ -1290,8 +1290,8 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # order: (id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created)
     order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
     
-    status_emoji = {'new': '🆕', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-    status_text = {'new': 'Активен', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+    status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
     
     # Формируем адрес
     full_address = street
