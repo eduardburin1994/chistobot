@@ -1267,3 +1267,55 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Детальный просмотр конкретного заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = int(query.data.replace('order_detail_', ''))
+    
+    import database as db
+    order = db.get_order_by_id(order_id)
+    
+    if not order:
+        await query.edit_message_text(
+            "❌ Заказ не найден",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='order_detail_select')
+            ]])
+        )
+        return
+    
+    # order: (id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created)
+    order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+    
+    status_emoji = {'new': '🆕', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+    status_text = {'new': 'Активен', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+    
+    # Формируем адрес
+    full_address = street
+    details = []
+    if entrance:
+        details.append(f"под. {entrance}")
+    if floor:
+        details.append(f"эт. {floor}")
+    if apt:
+        details.append(f"кв. {apt}")
+    if intercom:
+        details.append(f"домофон {intercom}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    text = (
+        f"{status_emoji} <b>Заказ #{order_id}</b>\n\n"
+        f"👤 {name}\n"
+        f"📞 {phone}\n"
+        f"📍 {full_address}\n"
+        f"📅 {date} {time}\n"
+        f"🛍 {bags} мешков - {price} ₽\n"
+        f"📊 Статус: {status_text}\n\n"
+    )
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад к списку", callback_data='order_detail_select')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
