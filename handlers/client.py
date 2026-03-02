@@ -324,7 +324,7 @@ async def get_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return DATE
 
 async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик выбора даты - показываем только свободное время с учётом истекших слотов и рабочего времени"""
+    """Обработчик выбора даты - показываем только доступные слоты"""
     query = update.callback_query
     await query.answer()
     
@@ -347,20 +347,11 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     print(f"📅 Доступные слоты после фильтрации: {available_slots}")
     
-    # Создаем клавиатуру только со свободными слотами
+    # Упрощённая клавиатура — только названия слотов
     time_keyboard = []
     for slot in available_slots:
-        free = slot_info.get(slot, 0)
-        if free == 3:
-            button_text = f"{slot} (🔵 3 места)"
-        elif free == 2:
-            button_text = f"{slot} (🟢 2 места)"
-        elif free == 1:
-            button_text = f"{slot} (⚠️ 1 место)"
-        else:
-            continue
-        
-        time_keyboard.append([InlineKeyboardButton(button_text, callback_data=f'time_{slot}')])
+        # Просто показываем время слота, без информации о количестве мест
+        time_keyboard.append([InlineKeyboardButton(slot, callback_data=f'time_{slot}')])
     
     if not available_slots:
         # Нет свободного времени на эту дату
@@ -376,8 +367,7 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"✅ Отправляем клавиатуру с {len(available_slots)} слотами")
     await query.edit_message_text(
         f"📅 Дата: {selected_date}\n\n"
-        f"⏰ Шаг 3: Выберите время:\n"
-        f"(🔵 - 3 места, 🟢 - 2 места, ⚠️ - 1 место)",
+        f"⏰ Выберите удобное время:",
         reply_markup=InlineKeyboardMarkup(time_keyboard)
     )
     return TIME
