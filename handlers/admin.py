@@ -1,11 +1,11 @@
 # handlers/admin.py
-from config import admin_data
+from config import admin_data, WORK_HOURS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 from config import admin_data
 import datetime
-from constants import BROADCAST_MESSAGE, BLACKLIST_ADD
+from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END
 
 async def notify_admin(update, context, admin_id, order_id):
     """Уведомление администратора о новом заказе"""
@@ -34,12 +34,12 @@ async def notify_admin(update, context, admin_id, order_id):
     username_text = f" (@{username})" if username and username != "неизвестно" else ""
     
     text = (
-        f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id}</b>\n\n"
+        f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
         f"👤 {order[2]}{username_text}\n"
         f"📞 {order[3]}\n"
         f"📍 {full_address}\n"
         f"📅 {order[9]} {order[10]}\n"
-        f"🛍 {order[11]} мешков\n"
+        f"🛍 {order[11]} пакетов\n"
         f"💰 {order[12]} ₽\n"
     )
     
@@ -353,9 +353,9 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 👥 Всего клиентов: {len(clients)} (🟢 {active_users} активных)\n"
         f"• 💬 Новых сообщений: {new_messages}\n\n"
         f"💰 <b>Текущие цены:</b>\n"
-        f"• 1 мешок: {admin_data['prices']['1']} ₽\n"
-        f"• 2 мешка: {admin_data['prices']['2']} ₽\n"
-        f"• 3+ мешков: {admin_data['prices']['3+']} ₽/мешок\n\n"
+        f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
+        f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
+        f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
         f"<b>Выберите раздел:</b>"
     )
     
@@ -364,6 +364,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("👥 Управление клиентами", callback_data='admin_clients')],
         [InlineKeyboardButton("💬 Вопросы от клиентов", callback_data='admin_messages')],
         [InlineKeyboardButton("💰 ИЗМЕНИТЬ ЦЕНЫ", callback_data='admin_prices_menu')],
+        [InlineKeyboardButton("⏰ ВРЕМЯ РАБОТЫ", callback_data='admin_working_hours')],  # НОВАЯ КНОПКА
         [InlineKeyboardButton("📢 МАССОВАЯ РАССЫЛКА", callback_data='admin_broadcast')],
         [InlineKeyboardButton("🚫 Черный список", callback_data='admin_blacklist')],
         [InlineKeyboardButton("📊 РАСШИРЕННАЯ СТАТИСТИКА", callback_data='admin_stats')],
@@ -513,7 +514,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Средний чек
     avg_check = total_revenue / total_orders if total_orders > 0 else 0
     
-    # Статистика по мешкам
+    # Статистика по пакетам
     total_bags = sum(o[11] for o in orders)
     avg_bags = total_bags / total_orders if total_orders > 0 else 0
     
@@ -557,9 +558,9 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• ✅ Выполнено: {len(completed)}\n"
         f"• ❌ Отменено: {len(cancelled)}\n\n"
         
-        f"🛍 <b>Мешки:</b>\n"
-        f"• Всего вывезено: {total_bags} мешков\n"
-        f"• В среднем: {avg_bags:.1f} мешка/заказ\n\n"
+        f"🛍 <b>Пакеты:</b>\n"
+        f"• Всего вынесено: {total_bags} пакетов\n"
+        f"• В среднем: {avg_bags:.1f} пакета/заказ\n\n"
         
         f"⏰ <b>Популярное время:</b>\n"
         f"• {most_popular_time[0]} — {most_popular_time[1]} заказов\n"
@@ -619,7 +620,7 @@ async def admin_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYP
         text += f"<b>{date}:</b>\n"
         text += f"  • Заказов: {stats['count']}\n"
         text += f"  • Выручка: {stats['revenue']} ₽\n"
-        text += f"  • Мешков: {stats['bags']}\n"
+        text += f"  • Пакетов: {stats['bags']}\n"
         text += f"  • Статусы: 🆕{stats['new']} ✅{stats['confirmed']} ✅{stats['completed']} ❌{stats['cancelled']}\n\n"
     
     keyboard = [
@@ -664,6 +665,101 @@ async def admin_stats_charts(update: Update, context: ContextTypes.DEFAULT_TYPE)
     ]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+# =============== УПРАВЛЕНИЕ ВРЕМЕНЕМ РАБОТЫ ===============
+
+async def admin_working_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню управления временем работы"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    from config import WORK_HOURS
+    
+    text = (
+        "⏰ <b>ВРЕМЯ РАБОТЫ БОТА</b>\n\n"
+        f"Текущее время работы:\n"
+        f"• Начало: {WORK_HOURS['start']}:00\n"
+        f"• Окончание: {WORK_HOURS['end']}:00\n\n"
+        "Выберите, что хотите изменить:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("✏️ Время начала", callback_data='edit_start_hour')],
+        [InlineKeyboardButton("✏️ Время окончания", callback_data='edit_end_hour')],
+        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def edit_start_hour(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Изменение времени начала работы"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "Введите новое время начала работы (час от 0 до 23):\n"
+        "Например: 10"
+    )
+    return EDIT_WORKING_HOURS_START
+
+async def edit_end_hour(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Изменение времени окончания работы"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "Введите новое время окончания работы (час от 1 до 24):\n"
+        "Например: 22"
+    )
+    return EDIT_WORKING_HOURS_END
+
+async def set_working_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Установка нового времени работы"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    try:
+        hour = int(update.message.text)
+        editing_type = context.user_data.get('editing_working_hours')
+        
+        from config import WORK_HOURS
+        
+        if editing_type == 'start':
+            if 0 <= hour <= 23:
+                WORK_HOURS['start'] = hour
+                await update.message.reply_text(
+                    f"✅ Время начала работы изменено на {hour}:00",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("◀️ Назад к времени работы", callback_data='admin_working_hours')
+                    ]])
+                )
+            else:
+                await update.message.reply_text("❌ Введите час от 0 до 23!")
+                return EDIT_WORKING_HOURS_START
+        elif editing_type == 'end':
+            if 1 <= hour <= 24:
+                WORK_HOURS['end'] = hour
+                await update.message.reply_text(
+                    f"✅ Время окончания работы изменено на {hour}:00",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("◀️ Назад к времени работы", callback_data='admin_working_hours')
+                    ]])
+                )
+            else:
+                await update.message.reply_text("❌ Введите час от 1 до 24!")
+                return EDIT_WORKING_HOURS_END
+                
+    except ValueError:
+        await update.message.reply_text("❌ Введите число!")
+        return editing_type == 'start' and EDIT_WORKING_HOURS_START or EDIT_WORKING_HOURS_END
+    
+    return ConversationHandler.END
 
 # =============== ОСТАЛЬНЫЕ ФУНКЦИИ ===============
 
@@ -731,7 +827,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📞 {phone}\n"
             f"📍 {full_address}\n"
             f"📅 {date} {time}\n"
-            f"🛍 {bags} мешков - {price} ₽\n"
+            f"🛍 {bags} пакетов - {price} ₽\n"
             f"Статус: {status_text}\n"
         )
         
@@ -981,16 +1077,16 @@ async def admin_prices_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "💰 <b>УПРАВЛЕНИЕ ЦЕНАМИ</b>\n\n"
         f"Текущие цены:\n"
-        f"• 🟢 1 мешок: {admin_data['prices']['1']} ₽ (за один мешок)\n"
-        f"• 🟡 2 мешка: {admin_data['prices']['2']} ₽ (за два мешка, общая цена)\n"
-        f"• 🔴 3+ мешков: {admin_data['prices']['3+']} ₽ (фиксированная цена за весь объём)\n\n"
+        f"• 🟢 1 пакет: {admin_data['prices']['1']} ₽ (за один пакет)\n"
+        f"• 🟡 2 пакета: {admin_data['prices']['2']} ₽ (за два пакета, общая цена)\n"
+        f"• 🔴 3+ пакетов: {admin_data['prices']['3+']} ₽ (фиксированная цена за весь объём)\n\n"
         "Выберите, что хотите изменить:"
     )
     
     keyboard = [
-        [InlineKeyboardButton("✏️ 1 мешок", callback_data='edit_price_1')],
-        [InlineKeyboardButton("✏️ 2 мешка", callback_data='edit_price_2')],
-        [InlineKeyboardButton("✏️ 3+ мешков", callback_data='edit_price_3')],
+        [InlineKeyboardButton("✏️ 1 пакет", callback_data='edit_price_1')],
+        [InlineKeyboardButton("✏️ 2 пакета", callback_data='edit_price_2')],
+        [InlineKeyboardButton("✏️ 3+ пакетов", callback_data='edit_price_3')],
         [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
     ]
     
@@ -1004,7 +1100,7 @@ async def edit_price_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_type = query.data.replace('edit_price_', '')
     context.user_data['editing_price'] = price_type
     
-    price_names = {'1': '1 мешок', '2': '2 мешка', '3': '3+ мешков'}
+    price_names = {'1': '1 пакет', '2': '2 пакета', '3': '3+ пакетов'}
     
     await query.edit_message_text(
         f"✏️ Введите новую цену для <b>{price_names[price_type]}</b> (только число):",
@@ -1030,9 +1126,9 @@ async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"✅ Цена успешно изменена!\n\n"
                 f"Новые цены:\n"
-                f"• 1 мешок: {admin_data['prices']['1']} ₽\n"
-                f"• 2 мешка: {admin_data['prices']['2']} ₽\n"
-                f"• 3+ мешков: {admin_data['prices']['3+']} ₽/мешок",
+                f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
+                f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
+                f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("◀️ В админку", callback_data='admin')
                 ]])
