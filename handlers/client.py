@@ -1236,7 +1236,7 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         order_id, _, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
         
         status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+        status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
         
         # Формируем адрес
         full_address = street
