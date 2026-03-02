@@ -163,6 +163,11 @@ def get_user_by_id(user_id):
     cur.close()
     conn.close()
     return user
+
+# Инициализация базы данных при импорте модуля
+if __name__ != '__main__':
+    init_db()
+    print("✅ База данных инициализирована при импорте")
 # Добавь в requirements.txt: psycopg2-binary==2.9.9
 
 # Остальные функции (add_user, create_order и т.д.) нужно будет тоже адаптировать,
