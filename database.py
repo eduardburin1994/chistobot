@@ -145,6 +145,134 @@ def init_db():
     conn.close()
     print("✅ Таблицы PostgreSQL созданы или уже существуют")
 
+# =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ ===============
+
+def parse_time_slot(slot_time):
+    """Парсит временной слот и возвращает время начала и конца"""
+    start_str, end_str = slot_time.split('-')
+    start_hour, start_minute = map(int, start_str.split(':'))
+    end_hour, end_minute = map(int, end_str.split(':'))
+    return (start_hour, start_minute), (end_hour, end_minute)
+
+def is_slot_expired(slot_date, slot_time):
+    """
+    Проверяет, истёк ли слот.
+    Слот считается истекшим, если текущее время > начало слота + 1 час 15 минут
+    """
+    try:
+        now = datetime.datetime.now()
+        
+        # Парсим дату слота
+        day, month, year = map(int, slot_date.split('.'))
+        slot_datetime = datetime.datetime(year, month, day)
+        
+        # Парсим время начала слота
+        start_time_str = slot_time.split('-')[0]
+        start_hour, start_minute = map(int, start_time_str.split(':'))
+        
+        # Устанавливаем время начала слота
+        slot_start = slot_datetime.replace(hour=start_hour, minute=start_minute, second=0)
+        
+        # Добавляем 1 час 15 минут к началу слота
+        expiry_time = slot_start + datetime.timedelta(hours=1, minutes=15)
+        
+        # Если текущее время больше expiry_time, слот истёк
+        return now > expiry_time
+    except Exception as e:
+        print(f"❌ Ошибка при проверке истечения слота: {e}")
+        return True  # В случае ошибки считаем слот истёкшим для безопасности
+
+def get_available_slots(date):
+    """
+    Возвращает список доступных слотов для указанной даты
+    с учётом истекших слотов
+    """
+    from constants import TIME_SLOTS
+    
+    conn = get_connection()
+    if not conn:
+        return [], {}
+    
+    cur = conn.cursor()
+    available_slots = []
+    slot_info = {}
+    
+    try:
+        for slot in TIME_SLOTS:
+            # Проверяем, истёк ли слот
+            if is_slot_expired(date, slot):
+                continue  # Пропускаем истекшие слоты
+            
+            # Получаем количество занятых мест
+            cur.execute(
+                'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
+                (date, slot)
+            )
+            count = cur.fetchone()[0]
+            free_places = 3 - count
+            
+            if free_places > 0:
+                available_slots.append(slot)
+                slot_info[slot] = free_places
+        
+        return available_slots, slot_info
+    except Exception as e:
+        print(f"❌ Ошибка получения доступных слотов: {e}")
+        return [], {}
+    finally:
+        cur.close()
+        conn.close()
+
+def is_time_slot_free(date, time_slot):
+    """Проверка, свободен ли временной слот (максимум 3 заказа)"""
+    # Сначала проверяем, не истёк ли слот
+    if is_slot_expired(date, time_slot):
+        return False
+    
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
+            (date, time_slot)
+        )
+        count = cur.fetchone()[0]
+        return count < 3
+    except Exception as e:
+        print(f"❌ Ошибка проверки слота: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def get_slot_availability(date, time_slot):
+    """Получить количество свободных мест на конкретное время"""
+    # Если слот истёк, возвращаем 0
+    if is_slot_expired(date, time_slot):
+        return 0
+    
+    conn = get_connection()
+    if not conn:
+        return 0
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
+            (date, time_slot)
+        )
+        count = cur.fetchone()[0]
+        return 3 - count
+    except Exception as e:
+        print(f"❌ Ошибка получения доступности слота: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
 # =============== ФУНКЦИИ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ===============
 
 def get_user_by_id(user_id):
@@ -467,6 +595,10 @@ def get_all_orders():
 def create_order(user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
                  order_date, order_time, bags_count, price, payment_method='cash'):
     """Создание нового заказа"""
+    # Проверяем, не истёк ли слот
+    if is_slot_expired(order_date, order_time):
+        return False, "Это время уже недоступно для заказа (прошло более 1 часа 15 минут с начала слота)."
+    
     conn = get_connection()
     if not conn:
         return False, "Ошибка подключения к БД"
@@ -550,44 +682,22 @@ def cancel_order(order_id):
         cur.close()
         conn.close()
 
-def is_time_slot_free(date, time_slot):
-    """Проверка, свободен ли временной слот (максимум 3 заказа)"""
+def complete_order(order_id):
+    """Выполнение заказа - освобождаем место"""
     conn = get_connection()
     if not conn:
-        return False
+        return None
     
     cur = conn.cursor()
     try:
-        cur.execute(
-            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
-            (date, time_slot)
-        )
-        count = cur.fetchone()[0]
-        return count < 3
+        # Удаляем слот (освобождаем место)
+        cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
+        # Обновляем статус заказа
+        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', ('completed', order_id))
+        conn.commit()
+        print(f"✅ Заказ #{order_id} выполнен и слот освобождён")
     except Exception as e:
-        print(f"❌ Ошибка проверки слота: {e}")
-        return False
-    finally:
-        cur.close()
-        conn.close()
-
-def get_slot_availability(date, time_slot):
-    """Получить количество свободных мест на конкретное время"""
-    conn = get_connection()
-    if not conn:
-        return 0
-    
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            'SELECT COUNT(*) FROM busy_slots WHERE slot_date = %s AND slot_time = %s', 
-            (date, time_slot)
-        )
-        count = cur.fetchone()[0]
-        return 3 - count
-    except Exception as e:
-        print(f"❌ Ошибка получения доступности слота: {e}")
-        return 0
+        print(f"❌ Ошибка выполнения заказа {order_id}: {e}")
     finally:
         cur.close()
         conn.close()
