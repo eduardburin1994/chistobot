@@ -645,6 +645,24 @@ def create_order(user_id, client_name, phone, street_address, entrance, floor, a
         cur.close()
         conn.close()
 
+def confirm_order(order_id):
+    """Подтверждение заказа - меняет статус на confirmed, слот остаётся занятым"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Обновляем статус заказа на confirmed
+        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', ('confirmed', order_id))
+        conn.commit()
+        print(f"✅ Заказ #{order_id} подтверждён")
+    except Exception as e:
+        print(f"❌ Ошибка подтверждения заказа {order_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
 def update_order_status(order_id, new_status):
     """Обновление статуса заказа"""
     conn = get_connection()
