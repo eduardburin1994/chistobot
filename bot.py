@@ -333,9 +333,9 @@ async def main():
         fallbacks=[CommandHandler('cancel', cancel_command)]  # Изменено
     )
     # Добавляем команду отмены (если её нет)
-        async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            await update.message.reply_text("Действие отменено.")
-            return ConversationHandler.END
+    async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("Действие отменено.")
+        return ConversationHandler.END
     
     app.add_handler(CommandHandler('cancel', cancel_command))
     
