@@ -332,6 +332,12 @@ async def main():
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]  # Изменено
     )
+    # Добавляем команду отмены (если её нет)
+        async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await update.message.reply_text("Действие отменено.")
+            return ConversationHandler.END
+    
+    app.add_handler(CommandHandler('cancel', cancel_command))
     
     # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
     app.add_handler(welcome_handler)  # Сначала /start
@@ -346,12 +352,6 @@ async def main():
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     
-    # Добавляем команду отмены (если её нет)
-    async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("Действие отменено.")
-        return ConversationHandler.END
-    
-    app.add_handler(CommandHandler('cancel', cancel_command))
     
     print("🚀 Бот ЧистоBOT запущен на Render...")
     
