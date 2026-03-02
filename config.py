@@ -4,8 +4,8 @@ import logging
 from telegram.warnings import PTBUserWarning
 import warnings
 
-# Токен бота - читаем из переменной окружения
-TOKEN = os.environ.get('TELEGRAM_TOKEN', '8730099509:AAFkz3l80CSk44xHpAarc-jq1hTEouHBuvg')
+# Токен бота - читаем из переменной окружения (ВАЖНО: имя должно совпадать с Render!)
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8730099509:AAF83M1EjAqwB7FErvaRXJUPKaP-1kREv8I')
 
 # ID главного администратора
 MAIN_ADMIN_ID = 954653245
