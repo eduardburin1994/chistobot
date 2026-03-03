@@ -32,6 +32,8 @@ from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
     handle_new_chat_members
 )
+# from handlers.reply_handlers import handle_reply_buttons  # ВРЕМЕННО ОТКЛЮЧЕНО
+)
 
 # Константа для редактирования цен
 EDITING_PRICE = 100
