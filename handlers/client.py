@@ -771,7 +771,7 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
     keyboard = [
         [
             InlineKeyboardButton("✅ Да, подтвердить", callback_data='final_confirm'),
-            InlineKeyboardButton("✏️ Изменить", callback_data='new_order')
+            InlineKeyboardButton("✏️ Изменить", callback_data='change_address')  // ИСПРАВЛЕНО
         ]
     ]
     
