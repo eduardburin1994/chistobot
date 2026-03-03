@@ -95,22 +95,22 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
         text += f"📅 {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
         text += f"📝 <b>Сообщение:</b>\n{message_text}"
         
-        # Кнопки для ответа
-keyboard = []
+        # Кнопки для ответа  👈 ЭТА СТРОКА ДОЛЖНА БЫТЬ С ОТСТУПОМ
+        keyboard = []  # 👈 И ЭТА
 
-# Если есть username - ссылка на Telegram
-if username and username != "неизвестно":
-    clean_username = username.replace('@', '')
-    keyboard.append([InlineKeyboardButton("💬 Ответить в Telegram", url=f"https://t.me/{clean_username}")])
+        # Если есть username - ссылка на Telegram
+        if username and username != "неизвестно":  # 👈 И ЭТА
+            clean_username = username.replace('@', '')
+            keyboard.append([InlineKeyboardButton("💬 Ответить в Telegram", url=f"https://t.me/{clean_username}")])
 
-# НОВАЯ КНОПКА: Написать по ID (работает даже без username)
-keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
+        # НОВАЯ КНОПКА: Написать по ID (работает даже без username)
+        keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
 
-# Кнопка "Отметить как прочитано"
-keyboard.append([InlineKeyboardButton("✅ Отметить как прочитано", callback_data=f'mark_read_{message_id}')])
+        # Кнопка "Отметить как прочитано"
+        keyboard.append([InlineKeyboardButton("✅ Отметить как прочитано", callback_data=f'mark_read_{message_id}')])
 
-# Кнопка перехода к списку сообщений
-keyboard.append([InlineKeyboardButton("📋 Все сообщения", callback_data='admin_messages')])
+        # Кнопка перехода к списку сообщений
+        keyboard.append([InlineKeyboardButton("📋 Все сообщения", callback_data='admin_messages')])
         
         await context.bot.send_message(
             chat_id=admin_id,
