@@ -866,7 +866,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр всех клиентов с активными ссылками"""
+    """Просмотр всех клиентов с активными ссылками и кнопкой для отправки сообщения"""
     query = update.callback_query
     await query.answer()
     
@@ -885,9 +885,15 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    text = "👥 <b>Все клиенты:</b>\n\n"
+    # Отправляем заголовок
+    await query.edit_message_text(
+        "👥 <b>Список клиентов:</b>\n\n"
+        "👇 Ниже показаны первые 10 клиентов с кнопками для действий.",
+        parse_mode='HTML'
+    )
     
-    for client in clients[:10]:
+    # Отправляем каждого клиента отдельным сообщением с кнопкой
+    for i, client in enumerate(clients[:10]):  # Показываем первых 10
         user_id, username, first_name, last_name, phone, street, entrance, floor, apt, intercom, reg_date = client
         
         # Формируем имя
@@ -908,17 +914,55 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             username_text = "нет username"
         
-        text += f"{block_status} <b>{full_name}</b>\n"
-        text += f"  📱 {username_text}\n"
-        text += f"  📞 {phone or 'нет'}\n"
-        text += f"  🆔 <code>{user_id}</code>\n"
-        text += f"  📅 {reg_date}\n\n"
+        # Формируем текст для одного клиента
+        text = (
+            f"{block_status} <b>{full_name}</b>\n"
+            f"  📱 {username_text}\n"
+            f"  📞 {phone or 'нет'}\n"
+            f"  🆔 <code>{user_id}</code>\n"
+            f"  📅 {reg_date}\n"
+        )
+        
+        # КНОПКИ ДЛЯ КЛИЕНТА
+        keyboard = []
+        
+        # Кнопка "Написать сообщение" (всегда доступна)
+        keyboard.append([InlineKeyboardButton("💬 Написать сообщение", callback_data=f'write_to_user_{user_id}')])
+        
+        # Кнопка "Заблокировать/Разблокировать" (если нужно)
+        if user_id in admin_data['blocked_users']:
+            keyboard.append([InlineKeyboardButton("🔓 Разблокировать", callback_data=f'unblock_user_{user_id}')])
+        else:
+            keyboard.append([InlineKeyboardButton("🔒 Заблокировать", callback_data=f'block_user_{user_id}')])
+        
+        # Кнопка "Показать ID" (дублирует ID в тексте, но можно оставить)
+        keyboard.append([InlineKeyboardButton("🆔 Копировать ID", callback_data=f'show_user_id_{user_id}')])
+        
+        # Отправляем сообщение для этого клиента
+        if i == 0:
+            # Первое сообщение заменяет исходное
+            await query.message.reply_text(
+                text,
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            # Остальные отправляем новыми сообщениями
+            await query.message.reply_text(
+                text,
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
     
-    text += f"Всего клиентов: {len(clients)}"
-    
-    keyboard = [
-        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
-    ]
+    # Добавляем кнопку для возврата в админку
+    await query.message.reply_text(
+        "🔍 <b>Всего клиентов:</b> {}\n"
+        "Показаны первые 10.".format(len(clients)),
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
+        ]])
+    )
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
