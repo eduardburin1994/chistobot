@@ -186,6 +186,50 @@ async def blacklist_add_process(update: Update, context: ContextTypes.DEFAULT_TY
     
     return ConversationHandler.END
 
+async def blacklist_remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало удаления пользователя из ЧС"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return ConversationHandler.END
+    
+    await query.edit_message_text(
+        "Введите ID пользователя для удаления из черного списка:"
+    )
+    return BLACKLIST_REMOVE
+
+async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка удаления из ЧС"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    try:
+        target_user_id = int(update.message.text.strip())
+        
+        # Удаляем из черного списка
+        db.remove_from_blacklist(target_user_id)
+        
+        # Также удаляем из admin_data['blocked_users'] если есть
+        if target_user_id in admin_data['blocked_users']:
+            admin_data['blocked_users'].remove(target_user_id)
+        
+        await update.message.reply_text(
+            f"✅ Пользователь {target_user_id} удален из черного списка",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В админку", callback_data='admin')
+            ]])
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Введите корректный ID (только цифры)")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+    
+    return ConversationHandler.END
+
 # =============== РАССЫЛКА ===============
 
 async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
