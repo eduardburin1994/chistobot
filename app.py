@@ -40,7 +40,16 @@ async def telegram(request):
     try:
         # Получаем данные от Telegram
         body = await request.body()
-        update_data = json.loads(body)
+        
+        # ПРОБЛЕМНОЕ МЕСТО - добавим обработку ошибок кодировки
+        try:
+            update_data = json.loads(body.decode('utf-8'))
+        except UnicodeDecodeError:
+            # Пробуем другие кодировки
+            try:
+                update_data = json.loads(body.decode('cp1251'))
+            except:
+                update_data = json.loads(body.decode('latin-1'))
         
         # Безопасно логируем полученное обновление
         if 'message' in update_data:
