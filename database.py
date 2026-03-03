@@ -20,6 +20,24 @@ def get_connection():
     except Exception as e:
         print(f"❌ Ошибка подключения к БД: {e}")
         return None
+        
+def delete_order(order_id):
+    """Удаление заказа из базы данных"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
+        cur.execute('DELETE FROM orders WHERE order_id = %s', (order_id,))
+        conn.commit()
+        print(f"✅ Заказ #{order_id} удалён из базы данных")
+    except Exception as e:
+        print(f"❌ Ошибка удаления заказа {order_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
 
 def init_db():
     """Создание таблиц в базе данных PostgreSQL"""
