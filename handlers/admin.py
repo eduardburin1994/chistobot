@@ -807,12 +807,19 @@ async def admin_write_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE
         user_info = db.get_user_by_id(user_id)
         if user_info:
             name = user_info[2] or user_info[1] or f"ID {user_id}"
+            
+            # Кнопка отмены
+            cancel_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data='admin')
+            ]])
+            
             await query.edit_message_text(
                 f"✏️ <b>Написать пользователю {name}</b>\n\n"
                 f"🆔 ID: <code>{user_id}</code>\n"
                 f"📞 Телефон: {user_info[4] or 'не указан'}\n\n"
                 f"Введите текст сообщения для отправки:",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=cancel_keyboard
             )
             return SEND_MESSAGE_TO_USER
         else:
@@ -849,12 +856,19 @@ async def enter_user_id_for_message(update: Update, context: ContextTypes.DEFAUL
         
         if user_info:
             name = user_info[2] or user_info[1] or f"ID {target_user_id}"
+            
+            # Кнопка отмены
+            cancel_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data='admin')
+            ]])
+            
             await update.message.reply_text(
                 f"✏️ <b>Написать пользователю {name}</b>\n\n"
                 f"🆔 ID: <code>{target_user_id}</code>\n"
                 f"📞 Телефон: {user_info[4] or 'не указан'}\n\n"
                 f"Введите текст сообщения для отправки:",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=cancel_keyboard
             )
             return SEND_MESSAGE_TO_USER
         else:
