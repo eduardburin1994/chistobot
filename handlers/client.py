@@ -1312,3 +1312,152 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("◀️ Назад к списку", callback_data='order_detail_select')]]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+# =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
+
+async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия start_order для reply-кнопок"""
+    user_id = update.effective_user.id
+    user = update.effective_user
+    
+    print(f"👤 Новый заказ от пользователя {user_id} (reply)")
+    
+    # Инициализируем данные пользователя
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    
+    import database as db
+    db.add_user(
+        user_id=user_id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name
+    )
+    
+    if user.username:
+        db.update_user_username(user_id, user.username)
+    
+    user_info = db.get_user_by_id(user_id)
+    
+    if user_info and user_info[4]:  # если есть телефон
+        user_data[user_id]['name'] = user_info[2] or user.first_name
+        user_data[user_id]['phone'] = user_info[4]
+        user_data[user_id]['has_saved_data'] = True
+        # Вызываем выбор адреса
+        return await choose_address_reply(update, context)
+    else:
+        await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
+        return NAME
+
+async def choose_address_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия choose_address для reply-кнопок"""
+    user_id = update.effective_user.id
+    
+    import database as db
+    favorites = db.get_user_favorite_addresses(user_id)
+    
+    text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
+    
+    keyboard = []
+    if favorites:
+        for addr in favorites[:5]:
+            addr_id, name, street, entrance, floor, apt, intercom, _ = addr
+            short_address = street
+            if apt:
+                short_address += f", кв.{apt}"
+            button_text = f"{name} - {short_address}"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
+    
+    keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
+    keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
+    
+    await update.message.reply_text(
+        text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return SELECT_ADDRESS
+
+async def my_orders_detail_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия my_orders_detail для reply-кнопок"""
+    user_id = update.effective_user.id
+    import database as db
+    orders = db.get_user_orders(user_id)
+    
+    if not orders:
+        await update.message.reply_text("📭 У вас пока нет заказов.")
+        return
+    
+    text = "📋 <b>Ваши последние заказы:</b>\n\n"
+    
+    for i, order in enumerate(orders[:3]):
+        order_id, _, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+        
+        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+        status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+        
+        full_address = street
+        details = []
+        if entrance:
+            details.append(f"под. {entrance}")
+        if floor:
+            details.append(f"эт. {floor}")
+        if apt:
+            details.append(f"кв. {apt}")
+        if intercom:
+            details.append(f"домофон {intercom}")
+        if details:
+            full_address += f" ({', '.join(details)})"
+        
+        text += f"{status_emoji} <b>Заказ #{order_id}</b>\n"
+        text += f"📅 {date} {time}\n"
+        text += f"📍 {full_address}\n"
+        text += f"🛍 {bags} мешков - {price} ₽\n"
+        text += f"📊 Статус: {status_text}\n\n"
+    
+    if len(orders) > 3:
+        text += f"... и ещё {len(orders) - 3} заказов"
+    
+    keyboard = [
+        [InlineKeyboardButton("🔍 Подробнее о заказе", callback_data='order_detail_select')],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+    ]
+    
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def favorite_addresses_menu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия favorite_addresses_menu для reply-кнопок"""
+    user_id = update.effective_user.id
+    import database as db
+    
+    favorites = db.get_user_favorite_addresses(user_id)
+    
+    text = "⭐ <b>Мои избранные адреса</b>\n\n"
+    
+    if favorites:
+        for addr in favorites[:5]:
+            addr_id, name, street, entrance, floor, apt, intercom, created = addr
+            
+            full = street
+            details = []
+            if entrance:
+                details.append(f"под. {entrance}")
+            if floor:
+                details.append(f"эт. {floor}")
+            if apt:
+                details.append(f"кв. {apt}")
+            if intercom:
+                details.append(f"домофон {intercom}")
+            if details:
+                full += f" ({', '.join(details)})"
+            
+            text += f"🏷 <b>{name}</b>\n📍 {full}\n\n"
+    else:
+        text += "У вас пока нет избранных адресов"
+    
+    keyboard = [
+        [InlineKeyboardButton("➕ Добавить текущий адрес", callback_data='favorite_add')],
+        [InlineKeyboardButton("✏️ Управление адресами", callback_data='manage_favorites')],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+    ]
+    
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
