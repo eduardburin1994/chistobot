@@ -241,7 +241,10 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
             if user:
                 db.add_user(user.id, user.username, user.first_name, user.last_name)
                 print(f"✅ Пользователь {user.id} добавлен в базу через добавление бота")
-                # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
+            
+            break  # <--- Этот break должен быть здесь
+
+# =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 async def show_prices_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия show_prices для reply-кнопок"""
@@ -295,5 +298,3 @@ async def show_contact_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-            
-            break
