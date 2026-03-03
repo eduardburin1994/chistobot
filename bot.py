@@ -78,6 +78,7 @@ async def button_handler(update: Update, context):
     
     # Подтверждение заказа
     if query.data == 'final_confirm':
+        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")  # Добавьте это
         from handlers.client import final_confirm_order
         await final_confirm_order(update, context)
         return ConversationHandler.END
@@ -355,7 +356,7 @@ async def main(set_webhook=True):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags),
                 CallbackQueryHandler(bags_callback, pattern='^bags_')
             ],
-            CONFIRM_ORDER: [CallbackQueryHandler(confirm_order_before_final, pattern='^final_confirm$')],
+            CONFIRM_ORDER: [CallbackQueryHandler(final_confirm_order, pattern='^final_confirm$')],
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
