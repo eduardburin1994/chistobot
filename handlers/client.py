@@ -295,6 +295,26 @@ async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📶 Введите этаж (или 0 если нет):")
     return NEW_FLOOR
 
+async def new_floor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение нового этажа"""
+    user_id = update.effective_user.id
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    text = update.message.text
+    user_data[user_id]['floor'] = text if text not in ['0', '-'] else ''
+    await update.message.reply_text("🔢 Введите номер квартиры (или 0 если нет):")
+    return NEW_APARTMENT
+
+async def new_apartment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение новой квартиры"""
+    user_id = update.effective_user.id
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    text = update.message.text
+    user_data[user_id]['apartment'] = text if text not in ['0', '-'] else ''
+    await update.message.reply_text("🔔 Введите код домофона (или 0 если нет):")
+    return NEW_INTERCOM
+
 async def check_address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа про смену адреса"""
     query = update.callback_query
