@@ -104,6 +104,25 @@ async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат в главное меню"""
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
+    await query.answer()
+    
+    keyboard = get_main_keyboard(query.from_user.id in admin_data['admins'])
+    
+    await query.edit_message_text(
+        "👋 Главное меню:",
+        reply_markup=keyboard
+    )
+    return ConversationHandler.END
+
 async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать правила с информацией о зоне обслуживания"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
