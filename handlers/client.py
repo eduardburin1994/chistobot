@@ -9,7 +9,14 @@ from keyboards.client_keyboards import create_date_keyboard, get_back_button
 
 async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало процесса заказа - выбор адреса (из избранного или новый)"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        # Очищаем после использования
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
     
     user_id = query.from_user.id
@@ -27,7 +34,6 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем данные пользователя в базу данных
     import database as db
     
-    # Сначала добавляем/обновляем пользователя с его данными
     db.add_user(
         user_id=user_id,
         username=user.username,
@@ -35,24 +41,19 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_name=user.last_name
     )
     
-    # Если есть username, дополнительно обновляем его
     if user.username:
         db.update_user_username(user_id, user.username)
         print(f"✅ Username @{user.username} сохранён для пользователя {user_id}")
     
-    # Проверяем, есть ли у пользователя сохранённые данные
     user_info = db.get_user_by_id(user_id)
     
     if user_info and user_info[4]:  # если есть телефон
-        # Загружаем сохранённые данные
         user_data[user_id]['name'] = user_info[2] or user.first_name
         user_data[user_id]['phone'] = user_info[4]
         user_data[user_id]['has_saved_data'] = True
         
-        # Переходим к выбору адреса
         return await choose_address(update, context)
     else:
-        # Новый пользователь - запрашиваем данные
         await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
 
@@ -670,7 +671,13 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню избранных адресов"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
     
     user_id = query.from_user.id
@@ -684,7 +691,6 @@ async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_
         for addr in favorites[:5]:
             addr_id, name, street, entrance, floor, apt, intercom, created = addr
             
-            # Формируем полный адрес
             full = street
             details = []
             if entrance:
@@ -1197,7 +1203,13 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальный просмотр истории заказов"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
     
     user_id = query.from_user.id
@@ -1211,7 +1223,6 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Показываем последние 3 заказа с деталями
     text = "📋 <b>Ваши последние заказы:</b>\n\n"
     
     for i, order in enumerate(orders[:3]):
@@ -1220,7 +1231,6 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
         status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
         
-        # Формируем адрес
         full_address = street
         details = []
         if entrance:
