@@ -131,6 +131,114 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
     except Exception as e:
         print(f"❌ Ошибка отправки уведомления о сообщении админу {admin_id}: {e}")
 
+async def admin_order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Детальный просмотр конкретного заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    # Получаем ID заказа из callback_data
+    order_id = int(query.data.replace('order_detail_', ''))
+    
+    # Получаем заказ из базы
+    order = db.get_order_by_id(order_id)
+    if not order:
+        await query.edit_message_text("❌ Заказ не найден")
+        return
+    
+    # Распаковываем заказ
+    order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+    
+    # Получаем информацию о клиенте
+    user_info = db.get_user_by_id(user_id)
+    username = user_info[1] if user_info else None
+    
+    # Формируем полный адрес
+    full_address = street
+    details = []
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apt and apt not in ['0', '-']:
+        details.append(f"кв. {apt}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    # Статус
+    status_emoji = {
+        'new': '🆕', 
+        'confirmed': '✅', 
+        'completed': '✅', 
+        'cancelled': '❌'
+    }.get(status, '📝')
+    
+    status_text = {
+        'new': 'Новый',
+        'confirmed': 'Подтверждён',
+        'completed': 'Выполнен',
+        'cancelled': 'Отменён'
+    }.get(status, status)
+    
+    # Формируем детальную информацию
+    text = (
+        f"{status_emoji} <b>ЗАКАЗ #{order_id}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Клиент:</b> {name}\n"
+        f"📞 <b>Телефон:</b> {phone}\n"
+        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+    )
+    
+    if username and username != "неизвестно":
+        clean_username = username.replace('@', '')
+        text += f"📱 <b>Username:</b> <a href='https://t.me/{clean_username}'>@{username}</a>\n"
+    
+    text += (
+        f"📍 <b>Адрес:</b> {full_address}\n"
+        f"📅 <b>Дата:</b> {date}\n"
+        f"⏰ <b>Время:</b> {time}\n"
+        f"🛍 <b>Пакетов:</b> {bags}\n"
+        f"💰 <b>Сумма:</b> {price} ₽\n"
+        f"📊 <b>Статус:</b> {status_emoji} {status_text}\n"
+        f"📝 <b>Создан:</b> {created}\n"
+    )
+    
+    # Кнопки действий
+    keyboard = []
+    
+    # Кнопки связи
+    contact_row = []
+    if username and username != "неизвестно":
+        clean_username = username.replace('@', '')
+        contact_row.append(InlineKeyboardButton("💬 В Telegram", url=f"https://t.me/{clean_username}"))
+    contact_row.append(InlineKeyboardButton("✏️ По ID", callback_data=f'write_to_user_{user_id}'))
+    keyboard.append(contact_row)
+    
+    # Кнопки управления статусом
+    if status == 'new':
+        keyboard.append([
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f'confirm_{order_id}'),
+            InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+        ])
+        keyboard.append([InlineKeyboardButton("✅ Выполнить", callback_data=f'complete_{order_id}')])
+    elif status == 'confirmed':
+        keyboard.append([
+            InlineKeyboardButton("✅ Выполнить", callback_data=f'complete_{order_id}'),
+            InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+        ])
+    elif status == 'completed':
+        keyboard.append([InlineKeyboardButton("↩️ Вернуть в работу", callback_data=f'reopen_{order_id}')])
+    
+    # Кнопка назад
+    keyboard.append([InlineKeyboardButton("◀️ Назад к списку", callback_data='admin_orders')])
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 # =============== ЧЕРНЫЙ СПИСОК ===============
 
 async def admin_blacklist_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
