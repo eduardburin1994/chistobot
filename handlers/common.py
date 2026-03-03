@@ -105,7 +105,7 @@ async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Возврат в главное меню"""
+    """Возврат в главное меню с показом REPLY-кнопок"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
@@ -115,11 +115,19 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
     
+    # Показываем inline-клавиатуру
     keyboard = get_main_keyboard(query.from_user.id in admin_data['admins'])
-    
     await query.edit_message_text(
         "👋 Главное меню:",
         reply_markup=keyboard
+    )
+    
+    # Показываем REPLY-клавиатуру отдельным сообщением
+    from keyboards.reply_keyboards import get_main_reply_keyboard
+    is_admin = query.from_user.id in admin_data['admins']
+    await query.message.reply_text(
+        "Меню быстрого доступа 👇",
+        reply_markup=get_main_reply_keyboard(is_admin)
     )
     return ConversationHandler.END
 
