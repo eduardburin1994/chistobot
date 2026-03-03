@@ -314,6 +314,33 @@ async def new_apartment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]['apartment'] = text if text not in ['0', '-'] else ''
     await update.message.reply_text("🔔 Введите код домофона (или 0 если нет):")
     return NEW_INTERCOM
+    
+async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение нового домофона и обновление адреса в БД"""
+    user_id = update.effective_user.id
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    text = update.message.text
+    user_data[user_id]['intercom'] = text if text not in ['0', '-'] else ''
+    
+    # Обновляем адрес в базе данных
+    import database as db
+    db.update_user_address(
+        user_id,
+        user_data[user_id]['street_address'],
+        user_data[user_id].get('entrance', ''),
+        user_data[user_id].get('floor', ''),
+        user_data[user_id].get('apartment', ''),
+        user_data[user_id].get('intercom', '')
+    )
+    
+    # Переходим к выбору даты
+    keyboard = create_date_keyboard()
+    await update.message.reply_text(
+        "✅ Адрес сохранён!\n\n📅 Шаг 2: Выберите дату вывоза:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return DATE
 
 async def check_address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа про смену адреса"""
