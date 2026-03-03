@@ -1222,14 +1222,15 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # КОМПАКТНЫЙ ЗАГОЛОВОК
+    # ЗАГОЛОВОК
     text = f"🔍 <b>{filter_name}</b> | {page+1}/{total_pages} | {total_orders} зак.\n\n"
     
-    # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ (КАЖДЫЙ В ОДНУ СТРОКУ)
-    for i, order in enumerate(filtered_orders[start_idx:end_idx], start_idx + 1):
+    # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ
+    current_orders = []
+    for i, order in enumerate(filtered_orders[start_idx:end_idx], 1):
         order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+        current_orders.append(order_id)
         
-        # Статус эмодзи
         status_emoji = {
             'new': '🆕', 
             'confirmed': '✅', 
@@ -1237,29 +1238,34 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'cancelled': '❌'
         }.get(status, '📝')
         
-        # Короткий адрес (только улица + квартира если есть)
+        # Короткий адрес
         short_address = street.split(',')[0][:20]
         if apt and apt not in ['0', '-']:
             short_address += f" кв.{apt}"
         
-        # ОДНА СТРОКА НА ЗАКАЗ
-        text += f"{status_emoji} <b>#{order_id}</b> {name[:10]} | {short_address} | {bags}меш | {price}₽\n"
-        text += f"   📅 {date} {time} | 👤 <a href='' onclick='return false;'>ID{user_id}</a>\n\n"
+        # Текст заказа (номер НЕ кликабельный в тексте)
+        text += f"{status_emoji} #{order_id} {name[:15]} | {short_address} | {bags}меш | {price}₽\n"
+        text += f"   📅 {date} {time} | 👤 ID{user_id}\n\n"
     
-    # КНОПКИ ФИЛЬТРОВ
-    keyboard = [
-        [
-            InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
-            InlineKeyboardButton("✅ Подтв.", callback_data='orders_filter_confirmed')
-        ],
-        [
-            InlineKeyboardButton("✅ Выполн.", callback_data='orders_filter_completed'),
-            InlineKeyboardButton("❌ Отмен.", callback_data='orders_filter_cancelled')
-        ],
-        [InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')]
-    ]
+    # СОЗДАЕМ КЛАВИАТУРУ
+    keyboard = []
     
-    # КНОПКИ ПАГИНАЦИИ
+    # Кнопки фильтров (первый ряд)
+    keyboard.append([
+        InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
+        InlineKeyboardButton("✅ Подтв.", callback_data='orders_filter_confirmed')
+    ])
+    keyboard.append([
+        InlineKeyboardButton("✅ Выполн.", callback_data='orders_filter_completed'),
+        InlineKeyboardButton("❌ Отмен.", callback_data='orders_filter_cancelled')
+    ])
+    keyboard.append([InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')])
+    
+    # Кнопки для каждого заказа (переход к деталям)
+    for order_id in current_orders:
+        keyboard.append([InlineKeyboardButton(f"🔍 Заказ #{order_id}", callback_data=f'order_detail_{order_id}')])
+    
+    # Кнопки пагинации
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f'orders_page_{page-1}_{filter_type}'))
@@ -1269,16 +1275,19 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if nav_buttons:
         keyboard.append(nav_buttons)
     
-    # КНОПКИ ДЕЙСТВИЙ
+    # Кнопки действий
     keyboard.append([
-        InlineKeyboardButton("🔍 По номеру", callback_data='admin_orders_search'),
         InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup'),
         InlineKeyboardButton("◀️ Назад", callback_data='admin')
     ])
     
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    # Отправляем сообщение
+    try:
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        # Если сообщение не изменилось, просто игнорируем
+        if "Message is not modified" not in str(e):
+            print(f"Ошибка: {e}")
 
 async def admin_orders_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Очистка старых/выполненных заказов"""
