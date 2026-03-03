@@ -294,7 +294,7 @@ async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not address_exists:
         # Создаём название автоматически
-        default_name = f"Адрес {len(favorites) + 1}"
+        default_name = generate_address_name(user_id, street_address, apartment)
         
         db.save_favorite_address(
             user_id,
