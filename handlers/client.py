@@ -215,16 +215,58 @@ async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_
     )
     return DATE
 
+async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик выбора количества мешков через кнопки"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    bags = int(query.data.replace('bags_', ''))
+    
+    # Сохраняем в user_data
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    
+    user_data[user_id]['bags_count'] = bags
+    user_data[user_id]['bags_selected'] = True
+    
+    # Переходим к выбору способа оплаты
+    await query.edit_message_text(
+        f"🛍 Выбрано: <b>{bags} {get_bag_word(bags)}</b>\n\n"
+        f"💳 Шаг 4: Выберите способ оплаты",
+        parse_mode='HTML',
+        reply_markup=get_payment_keyboard()
+    )
+    return PAYMENT_METHOD
+
+def get_bag_word(count):
+    """Склонение слова 'мешок'"""
+    if count == 1:
+        return "мешок"
+    elif 2 <= count <= 4:
+        return "мешка"
+    else:
+        return "мешков"
+
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение нового адреса с проверкой района"""
+    """Получение нового адреса с проверкой района и защитой от повторного ввода"""
     user_id = update.effective_user.id
     address = update.message.text
     
     print(f"🏠 new_address: пользователь {user_id} вводит новый адрес: {address}")
     
+    # Проверяем, не вводил ли пользователь уже адрес
+    if user_id in user_data and user_data[user_id].get('address_confirmed', False):
+        await update.message.reply_text(
+            "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
     # =============== ПРОВЕРКА РАЙОНА ===============
     if not is_address_allowed(address):
-        # Формируем список улиц для красивой отправки
         streets_list = (
             "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
             "• Октябрьский проспект\n"
@@ -243,13 +285,15 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Например: <i>Октябрьский проспект, д. 50</i>",
             parse_mode='HTML'
         )
-        return NEW_ADDRESS  # Остаёмся в том же состоянии, просим ввести снова
+        return NEW_ADDRESS
     # ==============================================
+    
     if user_id not in user_data:
         user_data[user_id] = {}
         print(f"⚠️ Создана новая запись для пользователя {user_id}")
     
     user_data[user_id]['street_address'] = address
+    user_data[user_id]['address_confirmed'] = True  # Помечаем, что адрес уже введён
     print(f"✅ Сохранён новый адрес: {user_data[user_id]['street_address']}")
     print(f"🔄 Переходим к состоянию NEW_ENTRANCE ({NEW_ENTRANCE})")
     
