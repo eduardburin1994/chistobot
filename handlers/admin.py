@@ -327,8 +327,7 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============== АДМИН ПАНЕЛЬ ===============
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ-панель с улучшенным меню"""
-    # Получаем query из callback
+    """Админ-панель (компактная версия)"""
     query = update.callback_query
     
     if query.from_user.id not in admin_data['admins']:
@@ -341,41 +340,49 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clients = db.get_all_users()
     messages = db.get_all_messages()
     new_messages = sum(1 for m in messages if len(m) > 7 and m[7] == 'new') if messages else 0
-    active_users = len([c for c in clients if c[0] not in admin_data['blocked_users']])
     
-    test_status = "🧪 ВКЛ" if admin_data.get('test_mode', False) else "✅ ВЫКЛ"
+    test_status = "🧪" if admin_data.get('test_mode', False) else "✅"
     
     today = datetime.datetime.now().strftime("%d.%m.%Y")
     today_orders = [o for o in orders if o[9] == today] if orders else []
     
+    # КОМПАКТНАЯ СТАТИСТИКА В ОДНУ СТРОКУ
     text = (
-        f"👑 <b>СУПЕР-АДМИН ПАНЕЛЬ</b>\n\n"
-        f"🧪 <b>Тестовый режим:</b> {test_status}\n\n"
-        f"📊 <b>Краткая статистика:</b>\n"
-        f"• 📦 Заказов сегодня: {len(today_orders)}\n"
-        f"• 👥 Всего клиентов: {len(clients)} (🟢 {active_users} активных)\n"
-        f"• 💬 Новых сообщений: {new_messages}\n\n"
-        f"💰 <b>Текущие цены:</b>\n"
-        f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
-        f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
-        f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
-        f"<b>Выберите раздел:</b>"
+        f"👑 <b>АДМИН</b> {test_status}\n"
+        f"📦 {len(today_orders)} | 👥 {len(clients)} | 💬 {new_messages}\n"
+        f"💰 {admin_data['prices']['1']}/{admin_data['prices']['2']}/{admin_data['prices']['3+']}₽\n"
+        f"⬇️ Выберите действие:"
     )
     
+    # КОМПАКТНАЯ КЛАВИАТУРА (ПО 2 КНОПКИ В РЯДУ)
     keyboard = [
-        [InlineKeyboardButton("📦 Управление заказами", callback_data='admin_orders')],
-        [InlineKeyboardButton("👥 Управление клиентами", callback_data='admin_clients')],
-        [InlineKeyboardButton("💬 Вопросы от клиентов", callback_data='admin_messages')],
-        [InlineKeyboardButton("📢 Написать клиенту", callback_data='admin_write_to_user')],
-        [InlineKeyboardButton("💰 ИЗМЕНИТЬ ЦЕНЫ", callback_data='admin_prices_menu')],
-        [InlineKeyboardButton("⏰ ВРЕМЯ РАБОТЫ", callback_data='admin_working_hours')],
-        [InlineKeyboardButton("📢 МАССОВАЯ РАССЫЛКА", callback_data='admin_broadcast')],
-        [InlineKeyboardButton("🚫 Черный список", callback_data='admin_blacklist')],
-        [InlineKeyboardButton("📊 РАСШИРЕННАЯ СТАТИСТИКА", callback_data='admin_stats')],
-        [InlineKeyboardButton("🧪 Тестовый режим", callback_data='toggle_test_mode')],
-        [InlineKeyboardButton("📈 Экспорт данных", callback_data='admin_export')],
-        [InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+        [
+            InlineKeyboardButton("📦 Заказы", callback_data='admin_orders'),
+            InlineKeyboardButton("👥 Клиенты", callback_data='admin_clients')
+        ],
+        [
+            InlineKeyboardButton("💬 Сообщения", callback_data='admin_messages'),
+            InlineKeyboardButton("📢 Написать", callback_data='admin_write_to_user')
+        ],
+        [
+            InlineKeyboardButton("💰 Цены", callback_data='admin_prices_menu'),
+            InlineKeyboardButton("⏰ Время", callback_data='admin_working_hours')
+        ],
+        [
+            InlineKeyboardButton("📢 Рассылка", callback_data='admin_broadcast'),
+            InlineKeyboardButton("🚫 ЧС", callback_data='admin_blacklist')
+        ],
+        [
+            InlineKeyboardButton("📊 Статистика", callback_data='admin_stats'),
+            InlineKeyboardButton("🧪 Тест", callback_data='toggle_test_mode')
+        ],
+        [
+            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export'),
+            InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')
+        ],
+        [
+            InlineKeyboardButton("◀️ Меню", callback_data='back_to_menu')
+        ]
     ]
     
     try:
