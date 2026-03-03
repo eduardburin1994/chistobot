@@ -16,11 +16,12 @@ from handlers.client import (
     get_name, get_phone, get_intercom, date_callback, time_callback, get_bags, 
     support_start, support_message, start_order, check_address_handler, 
     new_address, new_entrance, new_floor, new_apartment, new_intercom,
-    my_orders_detail, order_detail_select, favorite_add,
-    favorite_save, favorite_delete_menu, favorite_delete, choose_address, 
+    my_orders_detail, order_detail_select, favorite_addresses_menu,  # ← ДОБАВЬТЕ
+    favorite_add, favorite_save, favorite_delete_menu, favorite_delete, choose_address, 
     select_favorite_address, new_address_start, manage_favorites, edit_favorite_menu,
     edit_favorite_name, save_favorite_name, delete_favorite_confirm, confirm_delete_favorite,
-    favorite_add_after_order, payment_method_handler, back_to_bags, order_detail
+    favorite_add_after_order, payment_method_handler, back_to_bags, order_detail,
+    bags_callback, confirm_order_before_final
 )
 from handlers.admin import (
     handle_admin_actions, admin_panel, admin_orders, admin_clients, 
