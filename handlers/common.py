@@ -25,8 +25,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Для нового пользователя показываем специальное приветствие
         welcome_text = (
             f"👋 <b>Добро пожаловать в ЧистоBOT, {user.first_name}!</b>\n\n"
-            f"🚶‍♂️ Я помогу вам быстро и удобно <b>избавиться от накопившегося мусора</b> в Твери.\n"
-            f"Курьер приедет к вашему дому, поднимется к двери, заберёт пакеты и отнесёт их до ближайшего бака.\n\n"
+            f"🚶‍♂️ Я помогу вам быстро и удобно <b>избавиться от накопившегося мусора</b> в Твери.\n\n"
+            f"📍 <b>Зона обслуживания:</b> <u>Южный микрорайон</u>\n"
+            f"Мы работаем на следующих улицах:\n"
+            f"• Октябрьский проспект\n"
+            f"• Улица Можайского\n"
+            f"• Улица Королева\n"
+            f"• Улица Левитана\n"
+            f"• Бульвар Гусева\n"
+            f"• Улица Псковская\n"
+            f"• Улица С.Я. Лемешева\n\n"
             f"📝 <b>Нажмите кнопку ниже, чтобы начать работу:</b>"
         )
     else:
@@ -36,6 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👋 <b>С возвращением, {user.first_name}!</b>\n\n"
             f"🚶‍♂️ <b>ЧистоBOT</b> — твой помощник по выносу мусора в Твери!\n"
             f"Курьер заберёт пакеты прямо от твоей двери и донесёт до бака.\n\n"
+            f"📍 <b>Зона обслуживания:</b> <u>Южный микрорайон</u>\n\n"
             f"✨ <b>Что я умею:</b>\n"
             f"• 📦 Заказать вынос пакетов с мусором\n"
             f"• 📅 Выбрать удобную дату и время\n"
@@ -74,42 +83,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return WELCOME
 
-async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ответа на приветствие"""
-    query = update.callback_query
-    await query.answer()
-    
-    # В любом случае показываем главное меню
-    user_id = query.from_user.id
-    keyboard = get_main_keyboard(user_id in admin_data['admins'])
-    
-    # Разный текст в зависимости от ответа
-    if query.data == 'welcome_yes':
-        text = "Отлично! 🎉 Давайте начнём. Выберите действие в меню:"
-    else:
-        text = "Хорошо, если передумаете — я здесь! 😉\n\nВыберите действие в меню:"
-    
-    await query.edit_message_text(
-        text,
-        reply_markup=keyboard
-    )
-    return ConversationHandler.END
+# ... (остальные функции без изменений) ...
 
-async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Возврат в главное меню"""
-    query = update.callback_query
+async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать правила с информацией о зоне обслуживания"""
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
+    
+    rules_text = (
+        "📋 <b>Правила и условия:</b>\n\n"
+        "📍 <b>Зона обслуживания:</b>\n"
+        "Мы работаем ТОЛЬКО в Южном микрорайоне Твери на следующих улицах:\n"
+        "• Октябрьский проспект\n"
+        "• Улица Можайского\n"
+        "• Улица Королева\n"
+        "• Улица Левитана\n"
+        "• Бульвар Гусева\n"
+        "• Улица Псковская\n"
+        "• Улица С.Я. Лемешева\n\n"
+        "1️⃣ <b>Вес:</b> Общий вес всех пакетов не более 15 кг.\n"
+        "2️⃣ <b>Отмена:</b> Вы можете отменить заказ за 4 часа до прихода курьера.\n"
+        "3️⃣ <b>Время работы:</b> Заявки принимаются с 10:00 до 22:00.\n"
+        "4️⃣ <b>Отказ:</b> При превышении веса или адресе вне зоны обслуживания курьер вправе отказаться от выноса.\n"
+        "5️⃣ <b>Что можно выносить:</b> Обычные бытовые отходы. Строительный мусор и опасные отходы не принимаются.\n"
+        "6️⃣ <b>Как это работает:</b> Курьер забирает пакеты прямо от вашей двери и самостоятельно утилизирует их в ближайшем баке."
+    )
     
     keyboard = get_main_keyboard(query.from_user.id in admin_data['admins'])
     
     await query.edit_message_text(
-        "👋 Главное меню:",
+        rules_text,
+        parse_mode='HTML',
         reply_markup=keyboard
     )
     return ConversationHandler.END
 
 async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать расценки"""
+    """Показать расценки с примечанием о зоне"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
@@ -128,6 +144,7 @@ async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 🔴 <b>3 и более пакетов</b> — {admin_data['prices']['3+']} ₽\n"
         f"  <i>(фиксированная цена за весь объём)</i>\n\n"
         "⚠️ <b>Важно:</b> Общий вес всех пакетов не должен превышать 15 кг!\n\n"
+        "📍 <b>Зона обслуживания:</b> Южный микрорайон (список улиц в разделе Правила)\n\n"
         "💳 <b>Способы оплаты:</b>\n"
         "• 💵 Наличные курьеру\n"
         "• 💳 Перевод на карту курьера\n"
@@ -142,6 +159,8 @@ async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
     return ConversationHandler.END
+
+# ... (остальные функции, включая reply-версии, без изменений) ...
 async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать правила"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
