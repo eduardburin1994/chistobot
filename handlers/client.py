@@ -7,6 +7,33 @@ from config import user_data
 from constants import NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME
 from keyboards.client_keyboards import create_date_keyboard, get_back_button
 
+# =============== НАСТРОЙКИ ГЕОГРАФИИ ===============
+ALLOWED_STREETS = [
+    # Основные улицы Южного микрорайона
+    "октябрьский проспект", "октябрьский пр", "окт пр", "октябрьский",
+    "можайского", "ул можайского", "улица можайского",
+    "королева", "ул королева", "улица королева",
+    "левитана", "ул левитана", "улица левитана",
+    "гусева", "бульвар гусева", "б-р гусева",
+    
+    # Добавленные улицы
+    "псковская", "ул псковская", "улица псковская",
+    "лемешева", "ся лемешева", "улица лемешева", "ул лемешева"
+]
+
+def is_address_allowed(address):
+    """Проверяет, относится ли адрес к разрешённому району"""
+    address_lower = address.lower()
+    
+    # Убираем лишние пробелы и приводим к нормальному виду
+    address_lower = " ".join(address_lower.split())
+    
+    for street in ALLOWED_STREETS:
+        if street in address_lower:
+            return True
+    
+    return False
+# ==================================================
 # =============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===============
 def generate_address_name(user_id, street, apartment):
     """Генерирует автоматическое название для адреса"""
@@ -120,7 +147,7 @@ async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_ADDRESS
 
 async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор избранного адреса"""
+    """Выбор избранного адреса с проверкой района"""
     query = update.callback_query
     await query.answer()
     
@@ -138,6 +165,32 @@ async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_
             ]])
         )
         return SELECT_ADDRESS
+    
+    # =============== ПРОВЕРКА РАЙОНА ===============
+    if not is_address_allowed(address[3]):  # address[3] - это street_address
+        # Формируем список улиц для красивой отправки
+        streets_list = (
+            "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
+            "• Октябрьский проспект\n"
+            "• Улица Можайского\n"
+            "• Улица Королева\n"
+            "• Улица Левитана\n"
+            "• Бульвар Гусева\n"
+            "• Улица Псковская\n"
+            "• Улица С.Я. Лемешева\n\n"
+        )
+        
+        await query.edit_message_text(
+            f"❌ <b>Этот адрес находится за пределами зоны обслуживания</b>\n\n"
+            f"{streets_list}"
+            f"Пожалуйста, выберите адрес из списка или введите новый в Южном микрорайоне.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад к выбору", callback_data='choose_address')
+            ]])
+        )
+        return SELECT_ADDRESS
+    # ==============================================
     
     # Сохраняем выбранный адрес в данные пользователя
     if user_id not in user_data:
@@ -161,19 +214,46 @@ async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_
     )
     return DATE
 
-async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало ввода нового адреса"""
-    query = update.callback_query
-    await query.answer()
+async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение нового адреса с проверкой района"""
+    user_id = update.effective_user.id
+    address = update.message.text
     
-    await query.edit_message_text(
-        "🏠 Введите новый адрес (улица и дом):\n"
-        "Например: ул. Ленина, д. 10",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')
-        ]])
-    )
-    return NEW_ADDRESS
+    print(f"🏠 new_address: пользователь {user_id} вводит новый адрес: {address}")
+    
+    # =============== ПРОВЕРКА РАЙОНА ===============
+    if not is_address_allowed(address):
+        # Формируем список улиц для красивой отправки
+        streets_list = (
+            "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
+            "• Октябрьский проспект\n"
+            "• Улица Можайского\n"
+            "• Улица Королева\n"
+            "• Улица Левитана\n"
+            "• Бульвар Гусева\n"
+            "• Улица Псковская\n"
+            "• Улица С.Я. Лемешева\n\n"
+        )
+        
+        await update.message.reply_text(
+            f"❌ <b>К сожалению, этот адрес не входит в зону обслуживания</b>\n\n"
+            f"{streets_list}"
+            f"Пожалуйста, введите адрес в Южном микрорайоне:\n"
+            f"Например: <i>Октябрьский проспект, д. 50</i>",
+            parse_mode='HTML'
+        )
+        return NEW_ADDRESS  # Остаёмся в том же состоянии, просим ввести снова
+    # ==============================================
+    if user_id not in user_data:
+        user_data[user_id] = {}
+        print(f"⚠️ Создана новая запись для пользователя {user_id}")
+    
+    user_data[user_id]['street_address'] = address
+    print(f"✅ Сохранён новый адрес: {user_data[user_id]['street_address']}")
+    print(f"🔄 Переходим к состоянию NEW_ENTRANCE ({NEW_ENTRANCE})")
+    
+    await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
+    return NEW_ENTRANCE
 
 async def check_address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа про смену адреса"""
