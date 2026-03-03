@@ -331,9 +331,9 @@ async def blacklist_remove_user(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка удаления из ЧС"""
-    user_id = update.effective_user.id
+    admin_id = update.effective_user.id
     
-    if user_id not in admin_data['admins']:
+    if admin_id not in admin_data['admins']:
         await update.message.reply_text("⛔ Доступ запрещён")
         return ConversationHandler.END
     
@@ -344,7 +344,7 @@ async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT
         db.remove_from_blacklist(target_user_id)
         
         # Также удаляем из admin_data['blocked_users'] если есть
-        if target_user_id in admin_data['blocked_users']:
+        if target_user_id in admin_data.get('blocked_users', []):
             admin_data['blocked_users'].remove(target_user_id)
         
         await update.message.reply_text(
