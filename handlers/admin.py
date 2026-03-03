@@ -1202,6 +1202,9 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Для обратной совместимости
 async def admin_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Старая функция черного списка (заглушка)"""
+    await admin_blacklist_menu(update, context)
+
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1283,5 +1286,3 @@ async def admin_orders_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         
         await update.message.reply_text(text, parse_mode='HTML')
-    """Старая функция черного списка (заглушка)"""
-    await admin_blacklist_menu(update, context)
