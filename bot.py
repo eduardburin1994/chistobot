@@ -403,10 +403,10 @@ async def main(set_webhook=True):
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     
     # Импортируем обработчик reply-кнопок
-    from handlers.reply_handlers import handle_reply_buttons
+    #from handlers.reply_handlers import handle_reply_buttons
     
     # Добавляем обработчик для reply-кнопок
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reply_buttons))
+    #app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reply_buttons))
     
     # Добавляем команду отмены
     app.add_handler(CommandHandler('cancel', cancel_command))
