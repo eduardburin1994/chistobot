@@ -550,11 +550,12 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return DATE
     
     print(f"✅ Отправляем клавиатуру с {len(available_slots)} слотами")
-    await query.edit_message_text(
-        f"📅 Дата: {selected_date}\n\n"
-        f"⏰ Выберите удобное время:",
-        reply_markup=InlineKeyboardMarkup(time_keyboard)
-    )
+    try:
+        await query.edit_message_text(
+            f"📅 Дата: {selected_date}\n\n"
+            f"⏰ Выберите удобное время:",
+            reply_markup=InlineKeyboardMarkup(time_keyboard)
+        )
     except Exception as e:
         if "Message is not modified" not in str(e):
             print(f"Ошибка в date_callback: {e}")
@@ -914,69 +915,69 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     
     # Уведомление админам
-for admin_id in admin_data['admins']:
-    try:
-        # Получаем заказ для уведомления
-        order = db.get_order_by_id(order_id)
-        if order:
-            # Формируем текст уведомления
-            username = db.get_username_by_id(user_id)
-            username_text = f" (@{username})" if username and username != "неизвестно" else ""
-            
-            # Формируем адрес
-            full_address = street_address
-            details = []
-            if entrance and entrance not in ['0', '-']:
-                details.append(f"под. {entrance}")
-            if floor and floor not in ['0', '-']:
-                details.append(f"эт. {floor}")
-            if apartment and apartment not in ['0', '-']:
-                details.append(f"кв. {apartment}")
-            if intercom and intercom not in ['0', '-']:
-                details.append(f"домофон {intercom}")
-            if details:
-                full_address += f" ({', '.join(details)})"
-            
-            text = (
-                f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
-                f"👤 {name}{username_text}\n"
-                f"📞 {phone}\n"
-                f"📍 {full_address}\n"
-                f"📅 {order_date} {order_time}\n"
-                f"🛍 {bags} пакетов\n"
-                f"💰 {price} ₽\n"
-            )
-            
-            # Кнопки для админа
-            keyboard = []
-            
-            # Кнопка связи если есть username
-            if username and username != "неизвестно":
-                clean_username = username.replace('@', '')
-                keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
-            
-            # Кнопки управления заказом
-            keyboard.append([
-                InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
-                InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
-                InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
-            ])
-            
-            await context.bot.send_message(
-                chat_id=admin_id,
-                text=text,
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            print(f"✅ Уведомление о заказе #{order_id} отправлено админу {admin_id}")
-    except Exception as e:
-        print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
+    for admin_id in admin_data['admins']:
+        try:
+            # Получаем заказ для уведомления
+            order = db.get_order_by_id(order_id)
+            if order:
+                # Формируем текст уведомления
+                username = db.get_username_by_id(user_id)
+                username_text = f" (@{username})" if username and username != "неизвестно" else ""
+                
+                # Формируем адрес
+                full_address = street_address
+                details = []
+                if entrance and entrance not in ['0', '-']:
+                    details.append(f"под. {entrance}")
+                if floor and floor not in ['0', '-']:
+                    details.append(f"эт. {floor}")
+                if apartment and apartment not in ['0', '-']:
+                    details.append(f"кв. {apartment}")
+                if intercom and intercom not in ['0', '-']:
+                    details.append(f"домофон {intercom}")
+                if details:
+                    full_address += f" ({', '.join(details)})"
+                
+                text = (
+                    f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
+                    f"👤 {name}{username_text}\n"
+                    f"📞 {phone}\n"
+                    f"📍 {full_address}\n"
+                    f"📅 {order_date} {order_time}\n"
+                    f"🛍 {bags} пакетов\n"
+                    f"💰 {price} ₽\n"
+                )
+                
+                # Кнопки для админа
+                keyboard = []
+                
+                # Кнопка связи если есть username
+                if username and username != "неизвестно":
+                    clean_username = username.replace('@', '')
+                    keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
+                
+                # Кнопки управления заказом
+                keyboard.append([
+                    InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
+                    InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
+                    InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+                ])
+                
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=text,
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                print(f"✅ Уведомление о заказе #{order_id} отправлено админу {admin_id}")
+        except Exception as e:
+            print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
     
-    # Очищаем данные пользователя
+    # Очищаем данные пользователя (ВНЕ ЦИКЛА!)
     if user_id in user_data:
         del user_data[user_id]
     
-    return ConversationHandler.END
+    return ConversationHandler.END  # ВНЕ ЦИКЛА!
 
 async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
     """Переход к оплате после выбора количества мешков"""
