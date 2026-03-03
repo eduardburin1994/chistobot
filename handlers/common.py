@@ -9,6 +9,8 @@ import database as db
 from config import admin_data, user_data
 from keyboards.client_keyboards import get_main_keyboard
 from constants import WELCOME
+import logging
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Полноценный обработчик команды /start"""
@@ -83,6 +85,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return WELCOME
 
+async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /rules - показывает правила пользования ботом"""
+    user = update.effective_user
+    user_id = user.id
+    
+    logger.info(f"📋 Пользователь {user_id} запросил правила через команду /rules")
+    
+    # Проверка на блокировку
+    if user_id in admin_data.get('blocked_users', []):
+        await update.message.reply_text("⛔ Вы заблокированы в этом боте.")
+        return
+    
+    rules_text = (
+        "📋 <b>Правила и условия:</b>\n\n"
+        "📍 <b>Зона обслуживания:</b>\n"
+        "Мы работаем ТОЛЬКО в Южном микрорайоне Твери на следующих улицах:\n"
+        "• Октябрьский проспект\n"
+        "• Улица Можайского\n"
+        "• Улица Королева\n"
+        "• Улица Левитана\n"
+        "• Бульвар Гусева\n"
+        "• Улица Псковская\n"
+        "• Улица С.Я. Лемешева\n\n"
+        "1️⃣ <b>Вес:</b> Общий вес всех пакетов не более 15 кг.\n"
+        "2️⃣ <b>Отмена:</b> Вы можете отменить заказ за 4 часа до прихода курьера.\n"
+        "3️⃣ <b>Время работы:</b> Заявки принимаются с 10:00 до 22:00.\n"
+        "4️⃣ <b>Отказ:</b> При превышении веса или адресе вне зоны обслуживания курьер вправе отказаться от выноса.\n"
+        "5️⃣ <b>Что можно выносить:</b> Обычные бытовые отходы. Строительный мусор и опасные отходы не принимаются.\n"
+        "6️⃣ <b>Как это работает:</b> Курьер забирает пакеты прямо от вашей двери и самостоятельно утилизирует их в ближайшем баке."
+    )
+    
+    # Получаем клавиатуру главного меню (как после /start)
+    from keyboards.client_keyboards import get_main_keyboard
+    is_admin = user_id in admin_data['admins']
+    keyboard = get_main_keyboard(is_admin)
+    
+    await update.message.reply_text(
+        rules_text,
+        parse_mode='HTML',
+        reply_markup=keyboard
+    )
 async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа на приветствие"""
     query = update.callback_query
