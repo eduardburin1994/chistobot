@@ -110,7 +110,13 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать расценки"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
     
     price_text = (
@@ -136,10 +142,15 @@ async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
     return ConversationHandler.END
-
 async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать правила"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
     
     rules_text = (
