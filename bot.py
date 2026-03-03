@@ -31,7 +31,7 @@ from handlers.admin import (
 )
 from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
-    handle_new_chat_members, handle_text_message  # ← ДОБАВЬ ЭТО
+    handle_new_chat_members, handle_text_message, rules_command  # ← ДОБАВЛЕНО!
 )
 
 # Константа для редактирования цен
