@@ -5,6 +5,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from config import user_data
 from constants import NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME
+from keyboards.client_keyboards import create_date_keyboard, get_payment_keyboard, get_bags_keyboard
+from constants import CONFIRM_ORDER  # Добавьте новую константу
 
 # =============== НАСТРОЙКИ ГЕОГРАФИИ ===============
 ALLOWED_STREETS = [
@@ -719,6 +721,59 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return BAGS
 
+async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показ сводки заказа перед подтверждением"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    # Собираем всю информацию
+    name = user_data[user_id]['name']
+    phone = user_data[user_id]['phone']
+    address = user_data[user_id]['street_address']
+    date = user_data[user_id]['order_date']
+    time = user_data[user_id]['order_time']
+    bags = user_data[user_id]['bags_count']
+    payment = user_data[user_id]['payment_method']
+    
+    payment_names = {
+        'cash': '💵 Наличные',
+        'card': '💳 Перевод на карту',
+        'yookassa': '💰 Онлайн'
+    }
+    
+    # Функция склонения (если ещё не определена)
+    def get_bag_word(count):
+        if count == 1:
+            return "мешок"
+        elif 2 <= count <= 4:
+            return "мешка"
+        else:
+            return "мешков"
+    
+    text = (
+        f"📋 <b>Проверьте данные заказа:</b>\n\n"
+        f"👤 {name}\n"
+        f"📞 {phone}\n"
+        f"📍 {address}\n"
+        f"📅 {date} {time}\n"
+        f"🛍 {bags} {get_bag_word(bags)}\n"
+        f"💳 {payment_names.get(payment, payment)}\n\n"
+        f"✅ Всё верно?"
+    )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да, подтвердить", callback_data='final_confirm'),
+            InlineKeyboardButton("✏️ Изменить", callback_data='new_order')
+        ]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    # Нужно добавить новую константу CONFIRM_ORDER в constants.py
+    return CONFIRM_ORDER
+
 async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
     """Переход к оплате после выбора количества мешков"""
     user_id = update.effective_user.id
@@ -1174,6 +1229,39 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def repeat_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Повтор предыдущего заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = int(query.data.replace('repeat_order_', ''))
+    order = db.get_order_by_id(order_id)
+    
+    if not order:
+        await query.edit_message_text("❌ Заказ не найден")
+        return
+    
+    # Заполняем данные из прошлого заказа
+    user_id = query.from_user.id
+    user_data[user_id] = {
+        'name': order[2],
+        'phone': order[3],
+        'street_address': order[4],
+        'entrance': order[5] or '',
+        'floor': order[6] or '',
+        'apartment': order[7] or '',
+        'intercom': order[8] or ''
+    }
+    
+    # Переходим к выбору даты
+    from keyboards.client_keyboards import create_date_keyboard
+    keyboard = create_date_keyboard()
+    await query.edit_message_text(
+        "📅 Выберите новую дату для повторного заказа:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return DATE
 
 async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальный просмотр конкретного заказа"""
