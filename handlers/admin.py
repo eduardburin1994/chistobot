@@ -325,7 +325,12 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Админ-панель с улучшенным меню"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
     
     if query.from_user.id not in admin_data['admins']:
         await query.answer("⛔ Доступ запрещен", show_alert=True)
@@ -341,7 +346,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     test_status = "🧪 ВКЛ" if admin_data.get('test_mode', False) else "✅ ВЫКЛ"
     
-    # Статистика для быстрого просмотра
     today = datetime.datetime.now().strftime("%d.%m.%Y")
     today_orders = [o for o in orders if o[9] == today] if orders else []
     
@@ -364,7 +368,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("👥 Управление клиентами", callback_data='admin_clients')],
         [InlineKeyboardButton("💬 Вопросы от клиентов", callback_data='admin_messages')],
         [InlineKeyboardButton("💰 ИЗМЕНИТЬ ЦЕНЫ", callback_data='admin_prices_menu')],
-        [InlineKeyboardButton("⏰ ВРЕМЯ РАБОТЫ", callback_data='admin_working_hours')],  # НОВАЯ КНОПКА
+        [InlineKeyboardButton("⏰ ВРЕМЯ РАБОТЫ", callback_data='admin_working_hours')],
         [InlineKeyboardButton("📢 МАССОВАЯ РАССЫЛКА", callback_data='admin_broadcast')],
         [InlineKeyboardButton("🚫 Черный список", callback_data='admin_blacklist')],
         [InlineKeyboardButton("📊 РАСШИРЕННАЯ СТАТИСТИКА", callback_data='admin_stats')],
