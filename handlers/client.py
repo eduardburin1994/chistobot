@@ -57,12 +57,9 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
     
-    # Просто скрываем REPLY-клавиатуру без отправки сообщения
+    # Просто скрываем REPLY-клавиатуру БЕЗ отправки сообщения
     from keyboards.reply_keyboards import remove_keyboard
-    await query.message.reply_text(
-        "",  # Пустое сообщение (не будет видно)
-        reply_markup=remove_keyboard()
-    )
+    # Не отправляем пустое сообщение, просто меняем клавиатуру у следующего сообщения
     
     user_id = query.from_user.id
     user = update.effective_user
@@ -97,8 +94,10 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]['phone'] = user_info[4]
         user_data[user_id]['has_saved_data'] = True
         
+        # При вызове choose_address клавиатура уже будет скрыта
         return await choose_address(update, context)
     else:
+        # Сразу отправляем сообщение с запросом имени, и клавиатура уже будет скрыта
         await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
         
