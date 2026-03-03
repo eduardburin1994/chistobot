@@ -363,3 +363,14 @@ async def show_contact_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик обычных текстовых сообщений"""
+    user_id = update.effective_user.id
+    text = update.message.text
+    
+    print(f"💬 Получено сообщение от {user_id}: {text}")
+    
+    await update.message.reply_text(
+        "Я не понимаю обычные сообщения. Используйте команды или кнопки в меню.\n"
+        "Например: /start, /prices, /rules"
+    )
