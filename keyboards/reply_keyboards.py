@@ -3,8 +3,7 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 def get_main_reply_keyboard(is_admin=False):
     """
-    Главная reply-клавиатура (постоянные кнопки внизу)
-    Появляется после /start и остается до скрытия
+    Главная reply-клавиатура (появляется только в главном меню)
     """
     
     # Основные кнопки для всех пользователей
@@ -23,20 +22,26 @@ def get_main_reply_keyboard(is_admin=False):
         ]
     ]
     
-    # Кнопка для админа (если пользователь в списке админов)
+    # Кнопка для админа
     if is_admin:
         keyboard.append([KeyboardButton("👑 Админ-панель")])
     
     return ReplyKeyboardMarkup(
         keyboard,
-        resize_keyboard=True,  # Автоматически подгонять размер под экран
+        resize_keyboard=True,
         input_field_placeholder="👇 Нажмите кнопку или напишите сообщение...",
-        one_time_keyboard=False  # Клавиатура не исчезает после нажатия
+        one_time_keyboard=False
     )
+
+def remove_keyboard():
+    """
+    Скрыть reply-клавиатуру (используется во время диалогов)
+    """
+    return ReplyKeyboardRemove()
 
 def get_admin_reply_keyboard():
     """
-    Клавиатура для админ-панели (более детальная)
+    Клавиатура для админ-панели
     """
     keyboard = [
         [
@@ -66,9 +71,3 @@ def get_admin_reply_keyboard():
         input_field_placeholder="Админ-меню...",
         one_time_keyboard=False
     )
-
-def hide_keyboard():
-    """
-    Скрыть reply-клавиатуру
-    """
-    return ReplyKeyboardRemove()
