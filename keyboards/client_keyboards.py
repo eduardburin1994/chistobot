@@ -4,16 +4,25 @@ import datetime
 from datetime import timedelta
 
 def create_date_keyboard():
-    """Создает клавиатуру с ближайшими 5 датами"""
+    """Создает клавиатуру с 3 датами: сегодня, завтра, послезавтра"""
     keyboard = []
     today = datetime.datetime.now()
     
-    for i in range(1, 6):
+    # Названия дней недели
+    weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    
+    for i in range(0, 3):  # 0 - сегодня, 1 - завтра, 2 - послезавтра
         date = today + timedelta(days=i)
         date_str = date.strftime("%d.%m.%Y")
-        weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
         weekday = weekdays[date.weekday()]
-        button_text = f"{date_str} ({weekday})"
+        
+        if i == 0:
+            button_text = f"📅 Сегодня ({date_str} {weekday})"
+        elif i == 1:
+            button_text = f"📅 Завтра ({date_str} {weekday})"
+        else:
+            button_text = f"📅 Послезавтра ({date_str} {weekday})"
+            
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f'date_{date_str}')])
     
     return keyboard
@@ -21,7 +30,7 @@ def create_date_keyboard():
 def get_main_keyboard(is_admin=False):
     """Главное меню"""
     keyboard = [
-        [InlineKeyboardButton("📦 Заказать вывоз", callback_data='new_order')],
+        [InlineKeyboardButton("📦 Заказать вынос", callback_data='new_order')],
         [InlineKeyboardButton("📋 Мои заказы", callback_data='my_orders_detail')],
         [InlineKeyboardButton("⭐ Избранные адреса", callback_data='favorite_menu')],
         [InlineKeyboardButton("💰 Наши расценки", callback_data='prices')],
