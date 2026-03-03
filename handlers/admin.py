@@ -325,12 +325,8 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Админ-панель с улучшенным меню"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
-    if 'mock_callback_query' in context.bot_data:
-        query = context.bot_data['mock_callback_query']
-        del context.bot_data['mock_callback_query']
-    else:
-        query = update.callback_query
+    # Получаем query из callback
+    query = update.callback_query
     
     if query.from_user.id not in admin_data['admins']:
         await query.answer("⛔ Доступ запрещен", show_alert=True)
