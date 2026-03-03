@@ -1380,6 +1380,8 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
+# =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
+
 async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия start_order для reply-кнопок"""
     user_id = update.effective_user.id
@@ -1414,54 +1416,40 @@ async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
 
-async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор адреса при заказе (из избранного или новый)"""
-    # Проверяем, откуда пришел вызов - из callback или напрямую
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        user_id = query.from_user.id
-        message_func = query.edit_message_text
-    else:
-        # Если вызвана не из callback (например, из start_order)
-        user_id = update.effective_user.id
-        message_func = update.message.reply_text
+# =============== ДОБАВЬ ЭТУ ФУНКЦИЮ ===============
+async def choose_address_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия choose_address для reply-кнопок"""
+    user_id = update.effective_user.id
     
     import database as db
-    
-    # Получаем избранные адреса пользователя
     favorites = db.get_user_favorite_addresses(user_id)
     
     text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
     
     keyboard = []
-    
-    # Добавляем кнопки с избранными адресами
     if favorites:
-        for addr in favorites[:10]:  # Можно показать больше
+        for addr in favorites[:5]:
             addr_id, name, street, entrance, floor, apt, intercom, _ = addr
-            
-            # Формируем краткое описание адреса
             short_address = street
             if apt:
                 short_address += f", кв.{apt}"
-            
             button_text = f"{name} - {short_address}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
     
-    # Кнопка для нового адреса
     keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
     keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
     
-    await message_func(
+    await update.message.reply_text(
         text,
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return SELECT_ADDRESS
+# =================================================
 
 async def my_orders_detail_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия my_orders_detail для reply-кнопок"""
+    # ... остальной код
     user_id = update.effective_user.id
     import database as db
     orders = db.get_user_orders(user_id)
