@@ -327,48 +327,13 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Админ-панель с улучшенным меню"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
-    if 'mock_callback_query' in context.bot_data:
-        query = context.bot_data['mock_callback_query']
-        del context.bot_data['mock_callback_query']
-    else:
-        query = update.callback_query
-    
-    if query.from_user.id not in admin_data['admins']:
-        await query.answer("⛔ Доступ запрещен", show_alert=True)
-        return
-    
-    await query.answer()
-    
-    orders = db.get_all_orders()
-    clients = db.get_all_users()
-    messages = db.get_all_messages()
-    new_messages = sum(1 for m in messages if len(m) > 7 and m[7] == 'new') if messages else 0
-    active_users = len([c for c in clients if c[0] not in admin_data['blocked_users']])
-    
-    test_status = "🧪 ВКЛ" if admin_data.get('test_mode', False) else "✅ ВЫКЛ"
-    
-    today = datetime.datetime.now().strftime("%d.%m.%Y")
-    today_orders = [o for o in orders if o[9] == today] if orders else []
-    
-    text = (
-        f"👑 <b>СУПЕР-АДМИН ПАНЕЛЬ</b>\n\n"
-        f"🧪 <b>Тестовый режим:</b> {test_status}\n\n"
-        f"📊 <b>Краткая статистика:</b>\n"
-        f"• 📦 Заказов сегодня: {len(today_orders)}\n"
-        f"• 👥 Всего клиентов: {len(clients)} (🟢 {active_users} активных)\n"
-        f"• 💬 Новых сообщений: {new_messages}\n\n"
-        f"💰 <b>Текущие цены:</b>\n"
-        f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
-        f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
-        f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
-        f"<b>Выберите раздел:</b>"
-    )
+    # ... (начало функции без изменений) ...
     
     keyboard = [
         [InlineKeyboardButton("📦 Управление заказами", callback_data='admin_orders')],
         [InlineKeyboardButton("👥 Управление клиентами", callback_data='admin_clients')],
         [InlineKeyboardButton("💬 Вопросы от клиентов", callback_data='admin_messages')],
+        [InlineKeyboardButton("📢 Написать клиенту", callback_data='admin_write_to_user')],  # ← НОВАЯ КНОПКА
         [InlineKeyboardButton("💰 ИЗМЕНИТЬ ЦЕНЫ", callback_data='admin_prices_menu')],
         [InlineKeyboardButton("⏰ ВРЕМЯ РАБОТЫ", callback_data='admin_working_hours')],
         [InlineKeyboardButton("📢 МАССОВАЯ РАССЫЛКА", callback_data='admin_broadcast')],
@@ -379,6 +344,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
     ]
+    
+    # ... (остальной код функции) ...
     
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
