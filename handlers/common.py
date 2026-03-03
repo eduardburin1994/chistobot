@@ -241,5 +241,59 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
             if user:
                 db.add_user(user.id, user.username, user.first_name, user.last_name)
                 print(f"✅ Пользователь {user.id} добавлен в базу через добавление бота")
+                # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
+
+async def show_prices_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия show_prices для reply-кнопок"""
+    price_text = (
+        "💰 <b>Наши расценки:</b>\n\n"
+        f"• 🟢 <b>1 пакет</b> — {admin_data['prices']['1']} ₽\n"
+        f"  <i>(курьер заберёт и утилизирует один пакет)</i>\n\n"
+        f"• 🟡 <b>2 пакета</b> — {admin_data['prices']['2']} ₽\n"
+        f"  <i>(за два пакета, включая вынос)</i>\n\n"
+        f"• 🔴 <b>3 и более пакетов</b> — {admin_data['prices']['3+']} ₽\n"
+        f"  <i>(фиксированная цена за весь объём)</i>\n\n"
+        "⚠️ <b>Важно:</b> Общий вес всех пакетов не должен превышать 15 кг!\n\n"
+        "💳 <b>Способы оплаты:</b>\n"
+        "• 💵 Наличные курьеру\n"
+        "• 💳 Перевод на карту курьера\n"
+        "• 💻 Онлайн-оплата — <i>в разработке</i> 🔧"
+    )
+    
+    keyboard = get_main_keyboard(update.effective_user.id in admin_data['admins'])
+    await update.message.reply_text(price_text, parse_mode='HTML', reply_markup=keyboard)
+
+async def show_rules_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия show_rules для reply-кнопок"""
+    rules_text = (
+        "📋 <b>Правила и условия:</b>\n\n"
+        "1️⃣ <b>Вес:</b> Общий вес всех пакетов не более 15 кг.\n"
+        "2️⃣ <b>Отмена:</b> Вы можете отменить заказ за 4 часа до прихода курьера.\n"
+        "3️⃣ <b>Время работы:</b> Заявки принимаются с 10:00 до 22:00.\n"
+        "4️⃣ <b>Отказ:</b> При превышении веса курьер вправе отказаться от выноса.\n"
+        "5️⃣ <b>Что можно выносить:</b> Обычные бытовые отходы. Строительный мусор и опасные отходы не принимаются.\n"
+        "6️⃣ <b>Как это работает:</b> Курьер забирает пакеты прямо от вашей двери и самостоятельно утилизирует их в ближайшем баке."
+    )
+    
+    keyboard = get_main_keyboard(update.effective_user.id in admin_data['admins'])
+    await update.message.reply_text(rules_text, parse_mode='HTML', reply_markup=keyboard)
+
+async def show_contact_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия show_contact для reply-кнопок"""
+    contact_text = (
+        "📞 <b>Связаться с нами:</b>\n\n"
+        "Выберите способ связи:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("💬 Написать админу", callback_data='support_write')],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+    ]
+    
+    await update.message.reply_text(
+        contact_text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
             
             break
