@@ -21,7 +21,7 @@ from handlers.client import (
     select_favorite_address, new_address_start, manage_favorites, edit_favorite_menu,
     edit_favorite_name, save_favorite_name, delete_favorite_confirm, confirm_delete_favorite,
     favorite_add_after_order, payment_method_handler, back_to_bags, order_detail,
-    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order  # ← ДОБАВЛЕНО final_confirm_order
+    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order
 )
 from handlers.admin import (
     handle_admin_actions, admin_panel, admin_orders, admin_clients, 
@@ -32,7 +32,6 @@ from handlers.admin import (
     admin_working_hours, edit_start_hour, edit_end_hour, set_working_hours,
     admin_export, admin_settings,
     admin_write_to_user, enter_user_id_for_message, send_message_to_user,
-    # НОВЫЕ ФУНКЦИИ
     admin_orders_cleanup, process_orders_cleanup,
     blacklist_remove_user, blacklist_remove_process
 )
@@ -43,8 +42,6 @@ from handlers.common import (
 
 # Константа для редактирования цен
 EDITING_PRICE = 100
-# Новая константа для удаления из ЧС
-BLACKLIST_REMOVE = 38
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -79,13 +76,11 @@ async def button_handler(update: Update, context):
         await repeat_order(update, context)
         return ConversationHandler.END
     
-    # ===== ДОБАВЬТЕ ЭТОТ БЛОК =====
     # Подтверждение заказа
     if query.data == 'final_confirm':
         from handlers.client import final_confirm_order
         await final_confirm_order(update, context)
         return ConversationHandler.END
-    # ===============================
     
     # Обработка кнопок приветствия
     if query.data in ['welcome_yes', 'welcome_no']:
@@ -322,12 +317,7 @@ async def button_handler(update: Update, context):
     return ConversationHandler.END
 
 async def main(set_webhook=True):
-    """Асинхронная функция запуска бота
-    
-    Args:
-        set_webhook: если True - запускает polling (для локальной разработки)
-                     если False - только инициализирует и возвращает app (для webhook)
-    """
+    """Асинхронная функция запуска бота"""
     # Явная инициализация базы данных
     import database as db
     db.init_db()
@@ -364,11 +354,11 @@ async def main(set_webhook=True):
             BAGS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags),
                 CallbackQueryHandler(bags_callback, pattern='^bags_')
-        ],
-            CONFIRM_ORDER: [CallbackQueryHandler(confirm_order_before_final, pattern='^final_confirm$')],  # НОВОЕ
-    },
+            ],
+            CONFIRM_ORDER: [CallbackQueryHandler(confirm_order_before_final, pattern='^final_confirm$')],
+        },
         fallbacks=[CommandHandler('cancel', cancel_command)]
-)
+    )
 
     # ConversationHandler для отправки сообщений клиенту
     message_to_user_handler = ConversationHandler(
@@ -404,7 +394,6 @@ async def main(set_webhook=True):
     )
     
     # ConversationHandler для черного списка (с добавлением удаления)
-<<<<<<< HEAD
     blacklist_handler = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
@@ -416,21 +405,7 @@ async def main(set_webhook=True):
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
-
-=======
-blacklist_handler = ConversationHandler(
-    entry_points=[
-        CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
-        CallbackQueryHandler(blacklist_remove_user, pattern='^blacklist_remove_user$')
-    ],
-    states={
-        BLACKLIST_ADD: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_add_process)],
-        BLACKLIST_REMOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_remove_process)]
-    },
-    fallbacks=[CommandHandler('cancel', cancel_command)]
-)
     
->>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
     # ConversationHandler для рассылки
     broadcast_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(broadcast_new, pattern='^broadcast_new$')],
@@ -439,7 +414,7 @@ blacklist_handler = ConversationHandler(
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
-
+    
     # ConversationHandler для сообщений в поддержку
     support_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(support_start, pattern='^support_write$')],
@@ -448,7 +423,7 @@ blacklist_handler = ConversationHandler(
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
-
+    
     # ConversationHandler для приветствия (ЭТО ГЛАВНЫЙ ОБРАБОТЧИК /start)
     welcome_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
@@ -457,7 +432,7 @@ blacklist_handler = ConversationHandler(
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
-
+    
     # ConversationHandler для редактирования цен
     price_edit_handler = ConversationHandler(
         entry_points=[
@@ -468,7 +443,7 @@ blacklist_handler = ConversationHandler(
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
-
+    
     # ConversationHandler для времени работы
     working_hours_handler = ConversationHandler(
         entry_points=[
