@@ -616,17 +616,11 @@ async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получаем количество пакетов и сохраняем заказ в БД"""
     user_id = update.effective_user.id
+    
+    # ВАЖНО: импортируем admin_data
+    from config import admin_data
     is_admin = user_id in admin_data['admins']
     from keyboards.reply_keyboards import get_main_reply_keyboard
-    
-    # ... (весь существующий код до конца)
-    
-   # В конце функции, после успешного создания заказа, перед return:
-    await update.message.reply_text(
-        "Меню быстрого доступа 👇",
-        reply_markup=get_main_reply_keyboard(is_admin)
-    )
-    return ConversationHandler.END
     
     if user_id not in user_data:
         await update.message.reply_text(
@@ -770,7 +764,6 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payment_text += f"\n🔗 Ссылка для оплаты будет отправлена отдельно"
         
         from keyboards.client_keyboards import get_main_keyboard
-        from config import admin_data
         
         await update.message.reply_text(
             f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
@@ -786,7 +779,7 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Вам останется только открыть дверь!\n"
             f"Подтверждение заказа придёт отдельно.",
             parse_mode='HTML',
-            reply_markup=get_main_keyboard(user_id in admin_data['admins'])
+            reply_markup=get_main_keyboard(is_admin)
         )
         
         # Уведомление админу
@@ -797,6 +790,12 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await notify_admin(update, context, admin_id, order_id)
             except Exception as e:
                 print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
+        
+        # Возвращаем REPLY-кнопки
+        await update.message.reply_text(
+            "Меню быстрого доступа 👇",
+            reply_markup=get_main_reply_keyboard(is_admin)
+        )
         
         if user_id in user_data:
             del user_data[user_id]
