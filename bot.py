@@ -404,17 +404,17 @@ async def main(set_webhook=True):
     )
     
     # ConversationHandler для черного списка (с добавлением удаления)
-    blacklist_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
-            CallbackQueryHandler(blacklist_remove_user, pattern='^blacklist_remove_user$')
-        ],
-        states={
-            BLACKLIST_ADD: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_add_process)],
-            BLACKLIST_REMOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_remove_process)]
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)]
-    )
+blacklist_handler = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
+        CallbackQueryHandler(blacklist_remove_user, pattern='^blacklist_remove_user$')
+    ],
+    states={
+        BLACKLIST_ADD: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_add_process)],
+        BLACKLIST_REMOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_remove_process)]
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)]
+)
     
     # ConversationHandler для рассылки
     broadcast_handler = ConversationHandler(
