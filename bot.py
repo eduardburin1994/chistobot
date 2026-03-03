@@ -2,6 +2,8 @@
 import logging
 import asyncio
 import warnings
+from handlers.client import bags_callback
+from keyboards.client_keyboards import get_bags_keyboard
 from handlers.admin import admin_order_detail, reopen_order
 from telegram.warnings import PTBUserWarning
 warnings.filterwarnings("ignore", message="Fetching updates got a asyncio.CancelledError")
@@ -344,7 +346,10 @@ async def main(set_webhook=True):
             DATE: [CallbackQueryHandler(date_callback, pattern='^date_')],
             TIME: [CallbackQueryHandler(time_callback, pattern='^time_')],
             PAYMENT_METHOD: [CallbackQueryHandler(payment_method_handler, pattern='^pay_')],
-            BAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags)],
+            # В states добавьте:
+            BAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags),
+                    CallbackQueryHandler(bags_callback, pattern='^bags_')
+            ],
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
