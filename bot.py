@@ -30,7 +30,8 @@ from handlers.admin import (
 )
 from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
-    handle_new_chat_members
+    handle_new_chat_members, handle_text_message  # ← ДОБАВЬ ЭТО
+)
 
 )
 
@@ -402,6 +403,11 @@ async def main(set_webhook=True):
     app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
+        # Обработчик обычных текстовых сообщений (не команд)
+    #app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    
+    # Добавляем команду отмены
+    app.add_handler(CommandHandler('cancel', cancel_command))
     
     # Импортируем обработчик reply-кнопок
     #from handlers.reply_handlers import handle_reply_buttons
