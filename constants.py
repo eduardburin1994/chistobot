@@ -6,7 +6,8 @@
  NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME,
  SELECT_FAVORITE, ORDER_DETAIL, MANAGE_FAVORITES, EDIT_FAVORITE_NAME,
  SELECT_ADDRESS, BROADCAST_MESSAGE, TEST_MODE, EDIT_WORKING_HOURS_START, 
- EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE) = range(37)
+ EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE,
+ BLACKLIST_REMOVE) = range(38)
 
 # Интервалы времени (2-часовые слоты с 10:00 до 22:00)
 TIME_SLOTS = [
@@ -23,4 +24,37 @@ PAYMENT_METHODS = {
     'cash': '💵 Наличные курьеру',
     'card': '💳 Перевод на карту курьера',
     'yookassa': '💰 Онлайн-оплата (ЮKassa)'
+}
+
+# Константы для пагинации заказов
+ORDERS_PER_PAGE = 5
+ORDER_FILTER_ALL = 'all'
+ORDER_FILTER_NEW = 'new'
+ORDER_FILTER_CONFIRMED = 'confirmed'
+ORDER_FILTER_COMPLETED = 'completed'
+ORDER_FILTER_CANCELLED = 'cancelled'
+
+# Названия фильтров для отображения
+FILTER_NAMES = {
+    ORDER_FILTER_ALL: '📋 Все заказы',
+    ORDER_FILTER_NEW: '🆕 Новые',
+    ORDER_FILTER_CONFIRMED: '✅ Подтверждённые',
+    ORDER_FILTER_COMPLETED: '✅ Выполненные',
+    ORDER_FILTER_CANCELLED: '❌ Отменённые'
+}
+
+# Эмодзи для статусов заказов
+STATUS_EMOJI = {
+    'new': '🆕',
+    'confirmed': '✅',
+    'completed': '✅',
+    'cancelled': '❌'
+}
+
+# Русские названия статусов
+STATUS_NAMES = {
+    'new': 'Новый',
+    'confirmed': 'Подтверждён',
+    'completed': 'Выполнен',
+    'cancelled': 'Отменён'
 }

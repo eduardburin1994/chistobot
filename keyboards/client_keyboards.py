@@ -28,18 +28,24 @@ def create_date_keyboard():
     return keyboard
 
 def get_main_keyboard(is_admin=False):
-    """Главное меню"""
+    """Главное меню (компактная версия)"""
     keyboard = [
-        [InlineKeyboardButton("📦 Заказать вынос", callback_data='new_order')],
-        [InlineKeyboardButton("📋 Мои заказы", callback_data='my_orders_detail')],
-        [InlineKeyboardButton("⭐ Избранные адреса", callback_data='favorite_menu')],
-        [InlineKeyboardButton("💰 Наши расценки", callback_data='prices')],
-        [InlineKeyboardButton("📋 Правила", callback_data='rules')],
-        [InlineKeyboardButton("📞 Связаться", callback_data='contact')],
+        [
+            InlineKeyboardButton("📦 Заказать вынос", callback_data='new_order'),
+            InlineKeyboardButton("📋 Мои заказы", callback_data='my_orders_detail')
+        ],
+        [
+            InlineKeyboardButton("⭐ Избранное", callback_data='favorite_menu'),
+            InlineKeyboardButton("💰 Цены", callback_data='prices')
+        ],
+        [
+            InlineKeyboardButton("📋 Правила", callback_data='rules'),
+            InlineKeyboardButton("📞 Связаться", callback_data='contact')
+        ]
     ]
     
     if is_admin:
-        keyboard.append([InlineKeyboardButton("⚙️ Админ-панель", callback_data='admin')])
+        keyboard.append([InlineKeyboardButton("⚙️ Админка", callback_data='admin')])
     
     return InlineKeyboardMarkup(keyboard)
 
