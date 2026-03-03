@@ -51,12 +51,18 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
-        # Очищаем после использования
         del context.bot_data['mock_callback_query']
     else:
         query = update.callback_query
     
     await query.answer()
+    
+    # Скрываем REPLY-клавиатуру
+    from keyboards.reply_keyboards import remove_keyboard
+    await query.message.reply_text(
+        "⌨️ Режим ввода. REPLY-кнопки скрыты.",
+        reply_markup=remove_keyboard()
+    )
     
     user_id = query.from_user.id
     user = update.effective_user
@@ -404,7 +410,7 @@ async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return NEW_ADDRESS
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получаем имя клиента"""
+    """Получаем имя клиента (REPLY-кнопки уже скрыты)"""
     user_id = update.effective_user.id
     if user_id not in user_data:
         user_data[user_id] = {}
@@ -610,6 +616,17 @@ async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получаем количество пакетов и сохраняем заказ в БД"""
     user_id = update.effective_user.id
+    is_admin = user_id in admin_data['admins']
+    from keyboards.reply_keyboards import get_main_reply_keyboard
+    
+    # ... (весь существующий код до конца)
+    
+   # В конце функции, после успешного создания заказа, перед return:
+    await update.message.reply_text(
+        "Меню быстрого доступа 👇",
+        reply_markup=get_main_reply_keyboard(is_admin)
+    )
+    return ConversationHandler.END
     
     if user_id not in user_data:
         await update.message.reply_text(
