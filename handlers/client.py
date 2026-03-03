@@ -286,6 +286,44 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return DATE
 
+async def check_address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ответа про смену адреса"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    print(f"📝 check_address_handler: {query.data} для пользователя {user_id}")
+    
+    if query.data == 'change_address_yes':
+        # Меняем адрес
+        print(f"🔄 Пользователь {user_id} хочет изменить адрес")
+        
+        # Очищаем старые данные адреса
+        if user_id in user_data:
+            # Удаляем только данные адреса, оставляем имя и телефон
+            if 'street_address' in user_data[user_id]:
+                del user_data[user_id]['street_address']
+            if 'entrance' in user_data[user_id]:
+                del user_data[user_id]['entrance']
+            if 'floor' in user_data[user_id]:
+                del user_data[user_id]['floor']
+            if 'apartment' in user_data[user_id]:
+                del user_data[user_id]['apartment']
+            if 'intercom' in user_data[user_id]:
+                del user_data[user_id]['intercom']
+        
+        # Переходим к выбору адреса
+        return await choose_address(update, context)
+    else:
+        # Оставляем старый адрес - переходим к дате
+        print(f"✅ Пользователь {user_id} оставляет старый адрес, переходим к дате")
+        keyboard = create_date_keyboard()
+        await query.edit_message_text(
+            "📅 Шаг 1: Выберите дату вывоза:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return DATE
+
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получаем имя клиента"""
     user_id = update.effective_user.id
