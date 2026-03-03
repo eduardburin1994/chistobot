@@ -619,7 +619,6 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ВАЖНО: импортируем admin_data
     from config import admin_data
     is_admin = user_id in admin_data['admins']
-    from keyboards.reply_keyboards import get_main_reply_keyboard
     
     if user_id not in user_data:
         await update.message.reply_text(
@@ -790,11 +789,12 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
         
-        # Возвращаем REPLY-кнопки
-        await update.message.reply_text(
-            "Меню быстрого доступа 👇",
-            reply_markup=get_main_reply_keyboard(is_admin)
-        )
+        # УДАЛЯЕМ ЭТОТ БЛОК - ОН БОЛЬШЕ НЕ НУЖЕН
+        # # Возвращаем REPLY-кнопки
+        # await update.message.reply_text(
+        #     "Меню быстрого доступа 👇",
+        #     reply_markup=get_main_reply_keyboard(is_admin)
+        # )
         
         if user_id in user_data:
             del user_data[user_id]
