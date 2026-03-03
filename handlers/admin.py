@@ -5,7 +5,8 @@ from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 from config import admin_data
 import datetime
-from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
+from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, BLACKLIST_REMOVE, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
+
 # Константы для пагинации
 ORDERS_PER_PAGE = 5
 ORDER_FILTER_ALL = 'all'
@@ -102,11 +103,11 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
         text += f"📅 {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
         text += f"📝 <b>Сообщение:</b>\n{message_text}"
         
-        # Кнопки для ответа  👈 ЭТА СТРОКА ДОЛЖНА БЫТЬ С ОТСТУПОМ
-        keyboard = []  # 👈 И ЭТА
+        # Кнопки для ответа
+        keyboard = []
 
         # Если есть username - ссылка на Telegram
-        if username and username != "неизвестно":  # 👈 И ЭТА
+        if username and username != "неизвестно":
             clean_username = username.replace('@', '')
             keyboard.append([InlineKeyboardButton("💬 Ответить в Telegram", url=f"https://t.me/{clean_username}")])
 
@@ -190,6 +191,50 @@ async def blacklist_add_process(update: Update, context: ContextTypes.DEFAULT_TY
         )
     except ValueError:
         await update.message.reply_text("❌ Введите корректный ID")
+    
+    return ConversationHandler.END
+
+async def blacklist_remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало удаления пользователя из ЧС"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return ConversationHandler.END
+    
+    await query.edit_message_text(
+        "Введите ID пользователя для удаления из черного списка:"
+    )
+    return BLACKLIST_REMOVE
+
+async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка удаления из ЧС"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    try:
+        target_user_id = int(update.message.text.strip())
+        
+        # Удаляем из черного списка
+        db.remove_from_blacklist(target_user_id)
+        
+        # Также удаляем из admin_data['blocked_users'] если есть
+        if target_user_id in admin_data['blocked_users']:
+            admin_data['blocked_users'].remove(target_user_id)
+        
+        await update.message.reply_text(
+            f"✅ Пользователь {target_user_id} удален из черного списка",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В админку", callback_data='admin')
+            ]])
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Введите корректный ID (только цифры)")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
     
     return ConversationHandler.END
 
