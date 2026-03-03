@@ -6,6 +6,13 @@ import database as db
 from config import admin_data
 import datetime
 from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
+# Константы для пагинации
+ORDERS_PER_PAGE = 5
+ORDER_FILTER_ALL = 'all'
+ORDER_FILTER_NEW = 'new'
+ORDER_FILTER_CONFIRMED = 'confirmed'
+ORDER_FILTER_COMPLETED = 'completed'
+ORDER_FILTER_CANCELLED = 'cancelled'
 
 async def notify_admin(update, context, admin_id, order_id):
     """Уведомление администратора о новом заказе"""
@@ -978,7 +985,7 @@ async def toggle_test_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр всех заказов с кнопкой 'Написать клиенту' для каждого"""
+    """Просмотр заказов с пагинацией и фильтрацией"""
     query = update.callback_query
     await query.answer()
     
@@ -986,88 +993,233 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⛔ Доступ запрещён")
         return
     
-    orders = db.get_all_orders()
+    # Получаем параметры из callback_data или устанавливаем по умолчанию
+    data = query.data
     
-    if not orders:
-        await query.edit_message_text(
-            "📭 Нет заказов",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
-            ]])
-        )
+    # Определяем текущую страницу и фильтр
+    if data == 'admin_orders':
+        # Первый вход — показываем все заказы, страница 0
+        page = 0
+        filter_type = ORDER_FILTER_ALL
+    elif data.startswith('orders_page_'):
+        # Формат: orders_page_2_new или orders_page_0_all
+        parts = data.replace('orders_page_', '').split('_')
+        page = int(parts[0])
+        filter_type = parts[1] if len(parts) > 1 else ORDER_FILTER_ALL
+    elif data.startswith('orders_filter_'):
+        # Смена фильтра
+        filter_type = data.replace('orders_filter_', '')
+        page = 0
+    else:
+        page = 0
+        filter_type = ORDER_FILTER_ALL
+    
+    # Сохраняем в context.user_data для возврата
+    context.user_data['orders_page'] = page
+    context.user_data['orders_filter'] = filter_type
+    
+    # Получаем все заказы
+    all_orders = db.get_all_orders()
+    
+    # Фильтруем по статусу
+    if filter_type == ORDER_FILTER_ALL:
+        filtered_orders = all_orders
+        filter_name = "📋 ВСЕ ЗАКАЗЫ"
+    elif filter_type == ORDER_FILTER_NEW:
+        filtered_orders = [o for o in all_orders if o[13] == 'new']
+        filter_name = "🆕 НОВЫЕ"
+    elif filter_type == ORDER_FILTER_CONFIRMED:
+        filtered_orders = [o for o in all_orders if o[13] == 'confirmed']
+        filter_name = "✅ ПОДТВЕРЖДЁННЫЕ"
+    elif filter_type == ORDER_FILTER_COMPLETED:
+        filtered_orders = [o for o in all_orders if o[13] == 'completed']
+        filter_name = "✅ ВЫПОЛНЕННЫЕ"
+    elif filter_type == ORDER_FILTER_CANCELLED:
+        filtered_orders = [o for o in all_orders if o[13] == 'cancelled']
+        filter_name = "❌ ОТМЕНЁННЫЕ"
+    else:
+        filtered_orders = all_orders
+        filter_name = "📋 ВСЕ ЗАКАЗЫ"
+    
+    total_orders = len(filtered_orders)
+    total_pages = (total_orders + ORDERS_PER_PAGE - 1) // ORDERS_PER_PAGE
+    
+    # Корректируем страницу
+    if page >= total_pages and total_pages > 0:
+        page = total_pages - 1
+    if page < 0:
+        page = 0
+    
+    start_idx = page * ORDERS_PER_PAGE
+    end_idx = min(start_idx + ORDERS_PER_PAGE, total_orders)
+    
+    # Если нет заказов
+    if total_orders == 0:
+        text = f"{filter_name}\n\n📭 Нет заказов в этой категории"
+        
+        # Кнопки фильтров
+        keyboard = [
+            [
+                InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
+                InlineKeyboardButton("✅ Подтв.", callback_data='orders_filter_confirmed')
+            ],
+            [
+                InlineKeyboardButton("✅ Выполн.", callback_data='orders_filter_completed'),
+                InlineKeyboardButton("❌ Отмен.", callback_data='orders_filter_cancelled')
+            ],
+            [InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')],
+            [InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup')],
+            [InlineKeyboardButton("◀️ Назад", callback_data='admin')]
+        ]
+        
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # Отправляем по 3 заказа
-    for i, order in enumerate(orders[:6]):
+    # Формируем заголовок
+    text = f"{filter_name} | {page+1}/{total_pages} | {total_orders} заказов\n\n"
+    
+    # Показываем заказы на текущей странице
+    for i, order in enumerate(filtered_orders[start_idx:end_idx], 1):
         order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
         
-        # Формируем адрес
+        # Формируем адрес кратко
         full_address = street
-        details = []
-        if entrance:
-            details.append(f"под. {entrance}")
-        if floor:
-            details.append(f"эт. {floor}")
         if apt:
-            details.append(f"кв. {apt}")
-        if intercom:
-            details.append(f"домофон {intercom}")
-        if details:
-            full_address += f" ({', '.join(details)})"
+            full_address += f" кв.{apt}"
         
-        # Статус с новым статусом confirmed
-        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-        status_text = {'new': 'Новый', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+        # Статус эмодзи
+        status_emoji = {
+            'new': '🆕', 
+            'confirmed': '✅', 
+            'completed': '✅', 
+            'cancelled': '❌'
+        }.get(status, '📝')
         
-        text = (
-            f"{status_emoji} <b>Заказ #{order_id}</b>\n"
-            f"👤 {name}\n"
-            f"📞 {phone}\n"
-            f"📍 {full_address}\n"
-            f"📅 {date} {time}\n"
-            f"🛍 {bags} пакетов - {price} ₽\n"
-            f"Статус: {status_text}\n"
-        )
-        
-        # Получаем полную информацию о клиенте
-        user_info = db.get_user_by_id(user_id)
-        username = user_info[1] if user_info and len(user_info) > 1 else None
-        
-        # Кнопки управления
-        keyboard = []
-        
-        # Кнопка "Написать клиенту" (если есть username)
-        if username and username != "неизвестно" and username != "нет username" and username:
-            clean_username = username.replace('@', '')
-            keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
-        else:
-            # Если нет username, показываем ID
-            keyboard.append([InlineKeyboardButton("🆔 Показать ID клиента", callback_data=f'show_user_id_{user_id}')])
-        
-        # Кнопки управления заказом в зависимости от статуса
-        if status == 'new':
-            keyboard.append([
-                InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
-                InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
-                InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
-            ])
-        elif status == 'confirmed':
-            keyboard.append([
-                InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
-                InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
-            ])
-        
-        if i == 0:
-            await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            await query.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+        text += f"{status_emoji} <b>#{order_id}</b> {name}\n"
+        text += f"  📍 {full_address}\n"
+        text += f"  📅 {date} {time} | {bags}меш | {price}₽\n\n"
     
-    await query.message.reply_text(
-        f"Показаны первые {min(6, len(orders))} заказов из {len(orders)}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
-        ]])
+    # Кнопки фильтров (первый ряд)
+    keyboard = [
+        [
+            InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
+            InlineKeyboardButton("✅ Подтв.", callback_data='orders_filter_confirmed')
+        ],
+        [
+            InlineKeyboardButton("✅ Выполн.", callback_data='orders_filter_completed'),
+            InlineKeyboardButton("❌ Отмен.", callback_data='orders_filter_cancelled')
+        ],
+        [InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')]
+    ]
+    
+    # Кнопки пагинации (второй ряд)
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f'orders_page_{page-1}_{filter_type}'))
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton("Вперед ▶️", callback_data=f'orders_page_{page+1}_{filter_type}'))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    # Кнопки действий (третий ряд)
+    keyboard.append([
+        InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup'),
+        InlineKeyboardButton("◀️ Назад", callback_data='admin')
+    ])
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def admin_orders_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Очистка старых/выполненных заказов"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    text = (
+        "🗑 <b>ОЧИСТКА ЗАКАЗОВ</b>\n\n"
+        "Выберите, что хотите очистить:\n\n"
+        "• <b>Выполненные</b> — удалить все выполненные заказы\n"
+        "• <b>Отменённые</b> — удалить все отменённые заказы\n"
+        "• <b>Старые</b> — удалить заказы старше 30 дней\n"
+        "• <b>Всё</b> — удалить все заказы (кроме новых)"
     )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Выполненные", callback_data='cleanup_completed'),
+            InlineKeyboardButton("❌ Отменённые", callback_data='cleanup_cancelled')
+        ],
+        [
+            InlineKeyboardButton("📅 Старые (>30д)", callback_data='cleanup_old'),
+            InlineKeyboardButton("💥 Всё", callback_data='cleanup_all')
+        ],
+        [InlineKeyboardButton("◀️ Назад к заказам", callback_data='admin_orders')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def process_orders_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка очистки заказов"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    cleanup_type = query.data.replace('cleanup_', '')
+    all_orders = db.get_all_orders()
+    deleted_count = 0
+    
+    if cleanup_type == 'completed':
+        # Удаляем выполненные
+        for order in all_orders:
+            if order[13] == 'completed':
+                db.complete_order(order[0])  # Освобождаем слот
+                db.delete_order(order[0])     # Удаляем заказ
+                deleted_count += 1
+        message = f"✅ Удалено {deleted_count} выполненных заказов"
+    
+    elif cleanup_type == 'cancelled':
+        # Удаляем отменённые
+        for order in all_orders:
+            if order[13] == 'cancelled':
+                db.delete_order(order[0])
+                deleted_count += 1
+        message = f"✅ Удалено {deleted_count} отменённых заказов"
+    
+    elif cleanup_type == 'old':
+        # Удаляем старше 30 дней
+        from datetime import datetime, timedelta
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        
+        for order in all_orders:
+            try:
+                order_date = datetime.strptime(order[9], "%d.%m.%Y")
+                if order_date < thirty_days_ago and order[13] in ['completed', 'cancelled']:
+                    db.delete_order(order[0])
+                    deleted_count += 1
+            except:
+                pass
+        message = f"✅ Удалено {deleted_count} старых заказов"
+    
+    elif cleanup_type == 'all':
+        # Удаляем все кроме новых
+        for order in all_orders:
+            if order[13] in ['confirmed', 'completed', 'cancelled']:
+                if order[13] == 'completed' or order[13] == 'confirmed':
+                    db.complete_order(order[0])  # Освобождаем слот
+                db.delete_order(order[0])
+                deleted_count += 1
+        message = f"✅ Удалено {deleted_count} заказов (кроме новых)"
+    
+    else:
+        message = "❌ Неизвестный тип очистки"
+    
+    keyboard = [[InlineKeyboardButton("◀️ К заказам", callback_data='admin_orders')]]
+    await query.edit_message_text(message, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Просмотр всех клиентов с активными ссылками и кнопкой для отправки сообщения"""
