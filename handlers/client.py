@@ -292,7 +292,7 @@ async def check_address_handler(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return DATE
-        
+
 async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало ввода нового адреса"""
     query = update.callback_query
