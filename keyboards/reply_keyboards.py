@@ -65,7 +65,6 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
         from handlers.admin import admin_panel_reply
         context.bot_data['mock_callback_query'] = MockCallbackQuery('admin', user_id, update.message)
         await admin_panel_reply(update, context)
-        # Меняем клавиатуру на админскую
         await update.message.reply_text(
             "👑 Вы в админ-панели. Используйте кнопки ниже:",
             reply_markup=get_admin_reply_keyboard()
@@ -121,7 +120,6 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     elif text == "◀️ Назад в главное меню" and is_admin:
-        # Возврат в главное меню с обычной клавиатурой
         await update.message.reply_text(
             "👋 Главное меню:",
             reply_markup=get_main_reply_keyboard(is_admin)
@@ -129,7 +127,6 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     else:
-        # Если текст не соответствует ни одной кнопке
         await update.message.reply_text(
             "Используйте кнопки внизу экрана для навигации 👇",
             reply_markup=get_main_reply_keyboard(is_admin)
