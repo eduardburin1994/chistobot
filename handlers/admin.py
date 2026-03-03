@@ -1052,7 +1052,8 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Просмотр всех клиентов с активными ссылками и кнопкой для отправки сообщения"""
     query = update.callback_query
     await query.answer()
-    
+    # КНОПКИ ДЛЯ КЛИЕНТА
+keyboard = []  # ← можно добавить комментарий здесь
     if query.from_user.id not in admin_data['admins']:
         await query.edit_message_text("⛔ Доступ запрещён")
         return
