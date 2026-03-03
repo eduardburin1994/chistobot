@@ -26,7 +26,8 @@ from handlers.admin import (
     admin_blacklist_menu, blacklist_add_user, blacklist_add_process, admin_broadcast, 
     broadcast_new, broadcast_send, broadcast_history, notify_admin, toggle_test_mode,
     admin_working_hours, edit_start_hour, edit_end_hour, set_working_hours,
-    admin_export, admin_settings
+    admin_export, admin_settings,
+    admin_write_to_user, enter_user_id_for_message, send_message_to_user  # ← ДОБАВЬ ЭТИ
 )
 from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
