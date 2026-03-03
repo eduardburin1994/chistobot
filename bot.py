@@ -71,7 +71,13 @@ async def button_handler(update: Update, context):
     if query.data.startswith('reopen_'):
         await reopen_order(update, context)
         return ConversationHandler.END
-    
+
+    # Повтор заказа
+    if query.data.startswith('repeat_order_'):
+        from handlers.client import repeat_order
+        await repeat_order(update, context)
+        return ConversationHandler.END
+        
     # Обработка кнопок приветствия
     if query.data in ['welcome_yes', 'welcome_no']:
         keyboard = get_main_keyboard(user_id in admin_data['admins'])
@@ -346,13 +352,14 @@ async def main(set_webhook=True):
             DATE: [CallbackQueryHandler(date_callback, pattern='^date_')],
             TIME: [CallbackQueryHandler(time_callback, pattern='^time_')],
             PAYMENT_METHOD: [CallbackQueryHandler(payment_method_handler, pattern='^pay_')],
-            # В states добавьте:
-            BAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags),
-                    CallbackQueryHandler(bags_callback, pattern='^bags_')
-            ],
-        },
+            BAGS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags),
+                CallbackQueryHandler(bags_callback, pattern='^bags_')
+        ],
+            CONFIRM_ORDER: [CallbackQueryHandler(confirm_order_before_final, pattern='^final_confirm$')],  # НОВОЕ
+    },
         fallbacks=[CommandHandler('cancel', cancel_command)]
-    )
+)
 
     # ConversationHandler для отправки сообщений клиенту
     message_to_user_handler = ConversationHandler(
