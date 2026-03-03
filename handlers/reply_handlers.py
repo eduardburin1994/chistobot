@@ -45,16 +45,17 @@ async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
         await show_rules_reply(update, context)
         return
     
-    # =============== АДМИН-МЕНЮ ===============
-    elif text == "👑 Админ-панель" and is_admin:
-        from handlers.admin import admin_panel_reply
-        await admin_panel_reply(update, context)
-        # Меняем клавиатуру на админскую
-        await update.message.reply_text(
-            "👑 Вы в админ-панели. Используйте кнопки ниже:",
-            reply_markup=get_admin_reply_keyboard()
-        )
-        return
+# В функции handle_reply_buttons, для кнопки "👑 Админ-панель"
+elif text == "👑 Админ-панель" and is_admin:
+    from handlers.admin import admin_panel_reply
+    context.bot_data['mock_callback_query'] = MockCallbackQuery('admin', user_id, update.message)
+    await admin_panel_reply(update, context)
+    # Меняем клавиатуру на админскую (она своя)
+    await update.message.reply_text(
+        "👑 Вы в админ-панели. Используйте кнопки ниже:",
+        reply_markup=get_admin_reply_keyboard()
+    )
+    return
     
     elif text == "📦 Заказы" and is_admin:
         from handlers.admin import admin_orders_reply
