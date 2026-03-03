@@ -42,9 +42,13 @@ async def telegram(request):
         body = await request.body()
         update_data = json.loads(body)
         
-        # Логируем полученное обновление (для отладки)
+        # Безопасно логируем полученное обновление
         if 'message' in update_data:
-            logger.info(f"📩 Получено сообщение от {update_data['message']['from']['username']}")
+            # Проверяем, есть ли username
+            user_from = update_data['message'].get('from', {})
+            username = user_from.get('username', 'нет username')
+            first_name = user_from.get('first_name', '')
+            logger.info(f"📩 Получено сообщение от {first_name} (@{username})")
         
         # Передаём обновление боту
         from telegram import Update
