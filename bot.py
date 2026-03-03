@@ -75,10 +75,30 @@ async def button_handler(update: Update, context):
         from handlers.client import repeat_order
         await repeat_order(update, context)
         return ConversationHandler.END
-    
+
+    #    # ===== ИЗМЕНЕНИЕ АДРЕСА =====
+    if query.data == 'change_address':
+        user_id = query.from_user.id
+        print(f"🔄 Пользователь {user_id} изменяет адрес")
+        
+        # Очищаем данные адреса, но оставляем имя и телефон
+        if user_id in user_data:
+            user_data[user_id].pop('street_address', None)
+            user_data[user_id].pop('entrance', None)
+            user_data[user_id].pop('floor', None)
+            user_data[user_id].pop('apartment', None)
+            user_data[user_id].pop('intercom', None)
+            user_data[user_id].pop('address_name', None)
+        
+        from handlers.client import choose_address
+        await choose_address(update, context)
+        return SELECT_ADDRESS
+    # =============================
+    # ===============================
+
     # Подтверждение заказа
     if query.data == 'final_confirm':
-        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")  # Добавьте это
+        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")
         from handlers.client import final_confirm_order
         await final_confirm_order(update, context)
         return ConversationHandler.END
