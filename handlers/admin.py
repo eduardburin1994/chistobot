@@ -1268,7 +1268,10 @@ async def admin_messages_all(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if username and username != "неизвестно" and username != "нет username":
             clean_username = username.replace('@', '')
             keyboard.append([InlineKeyboardButton("💬 Ответить", url=f"https://t.me/{clean_username}")])
-        
+
+        # НОВАЯ КНОПКА: Написать по ID
+        keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
+
         # Кнопка "Отметить как прочитано"
         if status == 'new':
             keyboard.append([InlineKeyboardButton("✅ Отметить как прочитано", callback_data=f'mark_read_{msg_id}')])
