@@ -174,7 +174,13 @@ async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать контакты"""
-    query = update.callback_query
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
     await query.answer()
     
     contact_text = (
@@ -193,7 +199,6 @@ async def show_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return ConversationHandler.END
-
 async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик добавления бота в чат или группу"""
     if not update.message.new_chat_members:
