@@ -632,17 +632,11 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     user_data[user_id]['payment_method'] = payment_method
     
-    payment_names = {
-        'cash': '💵 Наличные курьеру',
-        'card': '💳 Перевод на карту курьера',
-        'yookassa': '💰 Онлайн-оплата (ЮKassa)'
-    }
+    # ВМЕСТО запроса количества мешков, ПОКАЗЫВАЕМ ПОДТВЕРЖДЕНИЕ
+    from handlers.client import confirm_order_before_final
+    await confirm_order_before_final(update, context)
+    return CONFIRM_ORDER  # Возвращаем новое состояние
     
-    await query.edit_message_text(
-        f"💳 Выбран способ оплаты: {payment_names[payment_method]}\n\n"
-        f"🛍 Введите количество пакетов с мусором (от 1 до 4, суммарный вес до 15 кг):"
-    )
-    return BAGS
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к выбору времени"""
     query = update.callback_query
