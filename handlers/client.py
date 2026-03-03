@@ -7,6 +7,22 @@ from config import user_data
 from constants import NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME
 from keyboards.client_keyboards import create_date_keyboard, get_back_button
 
+# =============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===============
+def generate_address_name(user_id, street, apartment):
+    """Генерирует автоматическое название для адреса"""
+    import database as db
+    favorites = db.get_user_favorite_addresses(user_id)
+    
+    # Если есть квартира, используем её
+    if apartment and apartment not in ['0', '-', '']:
+        return f"Кв. {apartment}"
+    
+    # Иначе по номеру
+    return f"Адрес {len(favorites) + 1}"
+# ======================================================
+
+async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало процесса заказа - выбор адреса (из избранного или новый)"""
 async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало процесса заказа - выбор адреса (из избранного или новый)"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
@@ -261,6 +277,36 @@ async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id].get('apartment', ''),
         user_data[user_id].get('intercom', '')
     )
+    
+    # =============== АВТОМАТИЧЕСКИ ДОБАВЛЯЕМ В ИЗБРАННОЕ ===============
+    # Проверяем, не добавлен ли уже этот адрес
+    favorites = db.get_user_favorite_addresses(user_id)
+    address_exists = False
+    
+    for fav in favorites:
+        if (fav[2] == user_data[user_id]['street_address'] and  # street_address
+            fav[3] == user_data[user_id].get('entrance', '') and
+            fav[4] == user_data[user_id].get('floor', '') and
+            fav[5] == user_data[user_id].get('apartment', '') and
+            fav[6] == user_data[user_id].get('intercom', '')):
+            address_exists = True
+            break
+    
+    if not address_exists:
+        # Создаём название автоматически
+        default_name = f"Адрес {len(favorites) + 1}"
+        
+        db.save_favorite_address(
+            user_id,
+            default_name,
+            user_data[user_id]['street_address'],
+            user_data[user_id].get('entrance', ''),
+            user_data[user_id].get('floor', ''),
+            user_data[user_id].get('apartment', ''),
+            user_data[user_id].get('intercom', '')
+        )
+        print(f"✅ Адрес автоматически добавлен в избранное для пользователя {user_id}")
+    # =================================================================
     
     # Переходим к выбору даты
     keyboard = create_date_keyboard()
@@ -1348,29 +1394,46 @@ async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
 
-async def choose_address_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия choose_address для reply-кнопок"""
-    user_id = update.effective_user.id
+async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор адреса при заказе (из избранного или новый)"""
+    # Проверяем, откуда пришел вызов - из callback или напрямую
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+        message_func = query.edit_message_text
+    else:
+        # Если вызвана не из callback (например, из start_order)
+        user_id = update.effective_user.id
+        message_func = update.message.reply_text
     
     import database as db
+    
+    # Получаем избранные адреса пользователя
     favorites = db.get_user_favorite_addresses(user_id)
     
     text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
     
     keyboard = []
+    
+    # Добавляем кнопки с избранными адресами
     if favorites:
-        for addr in favorites[:5]:
+        for addr in favorites[:10]:  # Можно показать больше
             addr_id, name, street, entrance, floor, apt, intercom, _ = addr
+            
+            # Формируем краткое описание адреса
             short_address = street
             if apt:
                 short_address += f", кв.{apt}"
+            
             button_text = f"{name} - {short_address}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
     
+    # Кнопка для нового адреса
     keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
     keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
     
-    await update.message.reply_text(
+    await message_func(
         text,
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
