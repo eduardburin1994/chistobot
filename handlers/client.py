@@ -619,42 +619,31 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     user_id = query.from_user.id
     
-    # ВАЖНО: Проверяем, есть ли данные пользователя
     if user_id not in user_data:
         print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
         user_data[user_id] = {}
     
     payment_method = query.data.replace('pay_', '')
     
-    # Если выбрана онлайн-оплата - показываем заглушку
     if payment_method == 'yookassa':
-        try:
-            await query.edit_message_text(
-                "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
-                "🔧 Мы работаем над подключением этого способа.\n"
-                "Пожалуйста, выберите другой способ оплаты:\n"
-                "• 💵 Наличные курьеру\n"
-                "• 💳 Перевод на карту курьера\n\n"
-                "Приносим извинения за неудобства!",
-                parse_mode='HTML',
-                reply_markup=get_payment_keyboard()
-            )
-        except Exception as e:
-            if "Message is not modified" not in str(e):
-                print(f"Ошибка в payment_method_handler (онлайн-оплата): {e}")
+        await query.edit_message_text(
+            "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
+            "🔧 Мы работаем над подключением этого способа.\n"
+            "Пожалуйста, выберите другой способ оплаты:\n"
+            "• 💵 Наличные курьеру\n"
+            "• 💳 Перевод на карту курьера\n\n"
+            "Приносим извинения за неудобства!",
+            parse_mode='HTML',
+            reply_markup=get_payment_keyboard()
+        )
         return PAYMENT_METHOD
     
     user_data[user_id]['payment_method'] = payment_method
     
-    # ВМЕСТО запроса количества мешков, ПОКАЗЫВАЕМ ПОДТВЕРЖДЕНИЕ
-    try:
-        from handlers.client import confirm_order_before_final
-        await confirm_order_before_final(update, context)
-    except Exception as e:
-        if "Message is not modified" not in str(e):
-            print(f"Ошибка в payment_method_handler: {e}")
-    
-    return CONFIRM_ORDER  # Возвращаем новое состояние
+    # Переходим к подтверждению
+    from handlers.client import confirm_order_before_final
+    await confirm_order_before_final(update, context)
+    return CONFIRM_ORDER
     
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к выбору времени"""
@@ -756,7 +745,6 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
         'yookassa': '💰 Онлайн'
     }
     
-    # Функция склонения
     def get_bag_word(count):
         if count == 1:
             return "мешок"
@@ -783,12 +771,10 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
         ]
     ]
     
-    # Добавляем try-except для игнорирования ошибки "Message is not modified"
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
         if "Message is not modified" not in str(e):
-            # Если это другая ошибка - выводим в лог
             print(f"Ошибка в confirm_order_before_final: {e}")
     
     return CONFIRM_ORDER
@@ -841,7 +827,8 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
             "Пожалуйста, выберите другую дату:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        del user_data[user_id]
+        if user_id in user_data:
+            del user_data[user_id]
         return DATE
     
     # Создаём заказ
@@ -868,7 +855,8 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
                 InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
             ]])
         )
-        del user_data[user_id]
+        if user_id in user_data:
+            del user_data[user_id]
         return ConversationHandler.END
     
     order_id = result[0]
@@ -906,7 +894,6 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
     from keyboards.client_keyboards import get_main_keyboard
     is_admin = user_id in admin_data['admins']
     
-    # Отправляем подтверждение пользователю
     await query.edit_message_text(
         f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
         f"👤 {name}\n"
