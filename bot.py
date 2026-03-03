@@ -406,6 +406,10 @@ async def main(set_webhook=True):
     )
     
     # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("rules", rules_command))  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
+    app.add_handler(CommandHandler("help", show_contact))  # если есть
+    app.add_handler(CommandHandler("admin", admin_panel))  # если есть
     app.add_handler(welcome_handler)  # Сначала /start
     app.add_handler(conv_handler)
     app.add_handler(favorite_handler)
