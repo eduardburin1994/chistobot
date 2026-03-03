@@ -1331,7 +1331,6 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
-# =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия start_order для reply-кнопок"""
