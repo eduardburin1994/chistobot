@@ -1202,5 +1202,86 @@ async def admin_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Для обратной совместимости
 async def admin_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
+
+async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия admin_panel для reply-кнопок"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещен")
+        return
+    
+    orders = db.get_all_orders()
+    clients = db.get_all_users()
+    messages = db.get_all_messages()
+    new_messages = sum(1 for m in messages if len(m) > 7 and m[7] == 'new') if messages else 0
+    active_users = len([c for c in clients if c[0] not in admin_data['blocked_users']])
+    
+    test_status = "🧪 ВКЛ" if admin_data.get('test_mode', False) else "✅ ВЫКЛ"
+    
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    today_orders = [o for o in orders if o[9] == today] if orders else []
+    
+    text = (
+        f"👑 <b>СУПЕР-АДМИН ПАНЕЛЬ</b>\n\n"
+        f"🧪 <b>Тестовый режим:</b> {test_status}\n\n"
+        f"📊 <b>Краткая статистика:</b>\n"
+        f"• 📦 Заказов сегодня: {len(today_orders)}\n"
+        f"• 👥 Всего клиентов: {len(clients)} (🟢 {active_users} активных)\n"
+        f"• 💬 Новых сообщений: {new_messages}\n\n"
+        f"💰 <b>Текущие цены:</b>\n"
+        f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
+        f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
+        f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
+        f"<b>Выберите раздел в меню ниже:</b>"
+    )
+    
+    await update.message.reply_text(text, parse_mode='HTML')
+
+async def admin_orders_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Версия admin_orders для reply-кнопок"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return
+    
+    orders = db.get_all_orders()
+    
+    if not orders:
+        await update.message.reply_text("📭 Нет заказов")
+        return
+    
+    for i, order in enumerate(orders[:6]):
+        order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+        
+        full_address = street
+        details = []
+        if entrance:
+            details.append(f"под. {entrance}")
+        if floor:
+            details.append(f"эт. {floor}")
+        if apt:
+            details.append(f"кв. {apt}")
+        if intercom:
+            details.append(f"домофон {intercom}")
+        if details:
+            full_address += f" ({', '.join(details)})"
+        
+        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+        status_text = {'new': 'Новый', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+        
+        text = (
+            f"{status_emoji} <b>Заказ #{order_id}</b>\n"
+            f"👤 {name}\n"
+            f"📞 {phone}\n"
+            f"📍 {full_address}\n"
+            f"📅 {date} {time}\n"
+            f"🛍 {bags} пакетов - {price} ₽\n"
+            f"Статус: {status_text}\n"
+        )
+        
+        await update.message.reply_text(text, parse_mode='HTML')
     """Старая функция черного списка (заглушка)"""
     await admin_blacklist_menu(update, context)
