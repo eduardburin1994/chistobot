@@ -57,10 +57,10 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
     
-    # Скрываем REPLY-клавиатуру
+    # Просто скрываем REPLY-клавиатуру без отправки сообщения
     from keyboards.reply_keyboards import remove_keyboard
     await query.message.reply_text(
-        "⌨️ Режим ввода. REPLY-кнопки скрыты.",
+        "",  # Пустое сообщение (не будет видно)
         reply_markup=remove_keyboard()
     )
     
@@ -101,7 +101,7 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
-
+        
 async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор адреса при заказе (из избранного или новый)"""
     # Проверяем, откуда пришел вызов - из callback или напрямую
