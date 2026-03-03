@@ -2,6 +2,7 @@
 import logging
 import asyncio
 import warnings
+from handlers.admin import admin_order_detail, reopen_order
 from telegram.warnings import PTBUserWarning
 warnings.filterwarnings("ignore", message="Fetching updates got a asyncio.CancelledError")
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -57,6 +58,16 @@ async def button_handler(update: Update, context):
     import database as db
     if db.is_user_blacklisted(user_id) and query.data not in ['rules', 'prices']:
         await query.edit_message_text("⛔ Вы заблокированы в этом боте.")
+        return ConversationHandler.END
+
+    # Детали заказа
+    if query.data.startswith('order_detail_'):
+        await admin_order_detail(update, context)
+        return ConversationHandler.END
+
+    # Возврат заказа в работу
+    if query.data.startswith('reopen_'):
+        await reopen_order(update, context)
         return ConversationHandler.END
     
     # Обработка кнопок приветствия
