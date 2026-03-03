@@ -85,9 +85,10 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
             f"🆔 {user_id}\n"
         )
         
-        if username and username != "неизвестно":
-            clean_username = username.replace('@', '')
-            text += f"📱 <a href='https://t.me/{clean_username}'>@{username}</a>\n"
+        # Безопасно проверяем username
+        if username and username != "неизвестно" and username != "нет username" and username != "None":
+            clean_username = str(username).replace('@', '')
+            text += f"📱 <a href='https://t.me/{clean_username}'>@{clean_username}</a>\n"
         else:
             text += f"📱 нет username\n"
         
@@ -99,8 +100,8 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
         keyboard = []
         
         # Если есть username - ссылка на Telegram
-        if username and username != "неизвестно":
-            clean_username = username.replace('@', '')
+        if username and username != "неизвестно" and username != "нет username" and username != "None":
+            clean_username = str(username).replace('@', '')
             keyboard.append([InlineKeyboardButton("💬 Ответить в Telegram", url=f"https://t.me/{clean_username}")])
         
         # Кнопка "Отметить как прочитано"
