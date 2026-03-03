@@ -74,12 +74,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     # ДОБАВЛЯЕМ ПОСТОЯННУЮ REPLY-КЛАВИАТУРУ (СТРЕЛОЧКА В КОНЦЕ)
-    from keyboards.reply_keyboards import get_main_reply_keyboard
-    is_admin = user.id in admin_data['admins']
-    await update.message.reply_text(
-        "Меню быстрого доступа 👇",
-        reply_markup=get_main_reply_keyboard(is_admin)
-    )
+    #from keyboards.reply_keyboards import get_main_reply_keyboard
+    #is_admin = user.id in admin_data['admins']
+    #await update.message.reply_text(
+    #    "Меню быстрого доступа 👇",
+    #    reply_markup=get_main_reply_keyboard(is_admin)
+    #)
     
     return WELCOME
 
