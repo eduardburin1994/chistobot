@@ -1030,7 +1030,7 @@ async def toggle_test_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр заказов с пагинацией и фильтрацией"""
+    """Просмотр заказов с пагинацией и фильтрацией (компактный вид)"""
     query = update.callback_query
     await query.answer()
     
@@ -1043,57 +1043,40 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Определяем текущую страницу и фильтр
     if data == 'admin_orders':
-        # Первый вход — показываем все заказы, страница 0
         page = 0
         filter_type = ORDER_FILTER_ALL
     elif data.startswith('orders_page_'):
-        # Формат: orders_page_2_new или orders_page_0_all
         parts = data.replace('orders_page_', '').split('_')
         page = int(parts[0])
         filter_type = parts[1] if len(parts) > 1 else ORDER_FILTER_ALL
     elif data.startswith('orders_filter_'):
-        # Смена фильтра
         filter_type = data.replace('orders_filter_', '')
         page = 0
     else:
         page = 0
         filter_type = ORDER_FILTER_ALL
     
-    # Сохраняем в context.user_data для возврата
     context.user_data['orders_page'] = page
     context.user_data['orders_filter'] = filter_type
     
-    # Получаем все заказы
     all_orders = db.get_all_orders()
     
     # Фильтруем по статусу
-    if filter_type == ORDER_FILTER_ALL:
-        filtered_orders = all_orders
-        filter_name = "📋 ВСЕ ЗАКАЗЫ"
-    elif filter_type == ORDER_FILTER_NEW:
-        filtered_orders = [o for o in all_orders if o[13] == 'new']
-        filter_name = "🆕 НОВЫЕ"
-    elif filter_type == ORDER_FILTER_CONFIRMED:
-        filtered_orders = [o for o in all_orders if o[13] == 'confirmed']
-        filter_name = "✅ ПОДТВЕРЖДЁННЫЕ"
-    elif filter_type == ORDER_FILTER_COMPLETED:
-        filtered_orders = [o for o in all_orders if o[13] == 'completed']
-        filter_name = "✅ ВЫПОЛНЕННЫЕ"
-    elif filter_type == ORDER_FILTER_CANCELLED:
-        filtered_orders = [o for o in all_orders if o[13] == 'cancelled']
-        filter_name = "❌ ОТМЕНЁННЫЕ"
-    else:
-        filtered_orders = all_orders
-        filter_name = "📋 ВСЕ ЗАКАЗЫ"
+    filter_config = {
+        ORDER_FILTER_ALL: (all_orders, "📋 ВСЕ ЗАКАЗЫ"),
+        ORDER_FILTER_NEW: ([o for o in all_orders if o[13] == 'new'], "🆕 НОВЫЕ"),
+        ORDER_FILTER_CONFIRMED: ([o for o in all_orders if o[13] == 'confirmed'], "✅ ПОДТВЕРЖДЁННЫЕ"),
+        ORDER_FILTER_COMPLETED: ([o for o in all_orders if o[13] == 'completed'], "✅ ВЫПОЛНЕННЫЕ"),
+        ORDER_FILTER_CANCELLED: ([o for o in all_orders if o[13] == 'cancelled'], "❌ ОТМЕНЁННЫЕ"),
+    }
+    
+    filtered_orders, filter_name = filter_config.get(filter_type, (all_orders, "📋 ВСЕ ЗАКАЗЫ"))
     
     total_orders = len(filtered_orders)
     total_pages = (total_orders + ORDERS_PER_PAGE - 1) // ORDERS_PER_PAGE
     
     # Корректируем страницу
-    if page >= total_pages and total_pages > 0:
-        page = total_pages - 1
-    if page < 0:
-        page = 0
+    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
     
     start_idx = page * ORDERS_PER_PAGE
     end_idx = min(start_idx + ORDERS_PER_PAGE, total_orders)
@@ -1101,8 +1084,6 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если нет заказов
     if total_orders == 0:
         text = f"{filter_name}\n\n📭 Нет заказов в этой категории"
-        
-        # Кнопки фильтров
         keyboard = [
             [
                 InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
@@ -1116,21 +1097,15 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup')],
             [InlineKeyboardButton("◀️ Назад", callback_data='admin')]
         ]
-        
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # Формируем заголовок
-    text = f"{filter_name} | {page+1}/{total_pages} | {total_orders} заказов\n\n"
+    # КОМПАКТНЫЙ ЗАГОЛОВОК
+    text = f"🔍 <b>{filter_name}</b> | {page+1}/{total_pages} | {total_orders} зак.\n\n"
     
-    # Показываем заказы на текущей странице
-    for i, order in enumerate(filtered_orders[start_idx:end_idx], 1):
+    # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ (КАЖДЫЙ В ОДНУ СТРОКУ)
+    for i, order in enumerate(filtered_orders[start_idx:end_idx], start_idx + 1):
         order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
-        
-        # Формируем адрес кратко
-        full_address = street
-        if apt:
-            full_address += f" кв.{apt}"
         
         # Статус эмодзи
         status_emoji = {
@@ -1140,11 +1115,16 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'cancelled': '❌'
         }.get(status, '📝')
         
-        text += f"{status_emoji} <b>#{order_id}</b> {name}\n"
-        text += f"  📍 {full_address}\n"
-        text += f"  📅 {date} {time} | {bags}меш | {price}₽\n\n"
+        # Короткий адрес (только улица + квартира если есть)
+        short_address = street.split(',')[0][:20]
+        if apt and apt not in ['0', '-']:
+            short_address += f" кв.{apt}"
+        
+        # ОДНА СТРОКА НА ЗАКАЗ
+        text += f"{status_emoji} <b>#{order_id}</b> {name[:10]} | {short_address} | {bags}меш | {price}₽\n"
+        text += f"   📅 {date} {time} | 👤 <a href='' onclick='return false;'>ID{user_id}</a>\n\n"
     
-    # Кнопки фильтров (первый ряд)
+    # КНОПКИ ФИЛЬТРОВ
     keyboard = [
         [
             InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
@@ -1157,7 +1137,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')]
     ]
     
-    # Кнопки пагинации (второй ряд)
+    # КНОПКИ ПАГИНАЦИИ
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f'orders_page_{page-1}_{filter_type}'))
@@ -1167,11 +1147,14 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if nav_buttons:
         keyboard.append(nav_buttons)
     
-    # Кнопки действий (третий ряд)
+    # КНОПКИ ДЕЙСТВИЙ
     keyboard.append([
+        InlineKeyboardButton("🔍 По номеру", callback_data='admin_orders_search'),
         InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup'),
         InlineKeyboardButton("◀️ Назад", callback_data='admin')
     ])
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
