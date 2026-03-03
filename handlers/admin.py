@@ -15,6 +15,20 @@ ORDER_FILTER_CONFIRMED = 'confirmed'
 ORDER_FILTER_COMPLETED = 'completed'
 ORDER_FILTER_CANCELLED = 'cancelled'
 
+async def reopen_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат заказа в статус confirmed"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    order_id = int(query.data.replace('reopen_', ''))
+    db.update_order_status(order_id, 'confirmed')
+    
+    # Показываем обновлённый заказ
+    await admin_order_detail(update, context)
+
 async def notify_admin(update, context, admin_id, order_id):
     """Уведомление администратора о новом заказе"""
     order = db.get_order_by_id(order_id)
