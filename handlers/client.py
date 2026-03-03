@@ -380,6 +380,29 @@ async def check_address_handler(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return DATE
 
+async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало ввода нового адреса"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "🏠 Введите новый адрес (улица и дом):\n"
+        "Например: ул. Ленина, д. 10\n\n"
+        "📍 <b>Мы работаем только в Южном микрорайоне</b> на улицах:\n"
+        "• Октябрьский проспект\n"
+        "• Улица Можайского\n"
+        "• Улица Королева\n"
+        "• Улица Левитана\n"
+        "• Бульвар Гусева\n"
+        "• Улица Псковская\n"
+        "• Улица С.Я. Лемешева",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')
+        ]]),
+        parse_mode='HTML'
+    )
+    return NEW_ADDRESS
+
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получаем имя клиента"""
     user_id = update.effective_user.id
