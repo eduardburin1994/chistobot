@@ -252,7 +252,6 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
     return NEW_ENTRANCE
 
-В
     for fav in favorites:
         if (len(fav) > 6 and
             fav[2] == street_address and
