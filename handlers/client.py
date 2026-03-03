@@ -793,6 +793,149 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
     
     return CONFIRM_ORDER
 
+async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Финальное подтверждение и создание заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    # Проверяем, есть ли данные пользователя
+    if user_id not in user_data:
+        await query.edit_message_text(
+            "❌ Произошла ошибка. Начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    from config import admin_data
+    from utils.helpers import calculate_price
+    import database as db
+    from handlers.admin import notify_admin
+    
+    # Получаем данные из user_data
+    name = user_data[user_id]['name']
+    phone = user_data[user_id]['phone']
+    street_address = user_data[user_id]['street_address']
+    entrance = user_data[user_id].get('entrance', '')
+    floor = user_data[user_id].get('floor', '')
+    apartment = user_data[user_id].get('apartment', '')
+    intercom = user_data[user_id].get('intercom', '')
+    order_date = user_data[user_id]['order_date']
+    order_time = user_data[user_id]['order_time']
+    bags = user_data[user_id]['bags_count']
+    payment_method = user_data[user_id]['payment_method']
+    
+    # Рассчитываем цену
+    price = calculate_price(bags)
+    
+    # Проверяем, свободен ли слот
+    is_free = db.is_time_slot_free(order_date, order_time)
+    
+    if not is_free:
+        keyboard = create_date_keyboard()
+        await query.edit_message_text(
+            "❌ К сожалению, это время только что заняли.\n"
+            "Пожалуйста, выберите другую дату:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        del user_data[user_id]
+        return DATE
+    
+    # Создаём заказ
+    result = db.create_order(
+        user_id=user_id,
+        client_name=name,
+        phone=phone,
+        street_address=street_address,
+        entrance=entrance,
+        floor=floor,
+        apartment=apartment,
+        intercom=intercom,
+        order_date=order_date,
+        order_time=order_time,
+        bags_count=bags,
+        price=price,
+        payment_method=payment_method
+    )
+    
+    if result[0] is False:
+        await query.edit_message_text(
+            f"❌ {result[1]}\n\nПожалуйста, попробуйте ещё раз.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        del user_data[user_id]
+        return ConversationHandler.END
+    
+    order_id = result[0]
+    
+    # Формируем полный адрес для сообщения
+    full_address = street_address
+    details = []
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apartment and apartment not in ['0', '-']:
+        details.append(f"кв. {apartment}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    # Текст о цене
+    if bags == 1:
+        price_text = f"💰 {price} ₽ (за 1 пакет)"
+    elif bags == 2:
+        price_text = f"💰 {price} ₽ (за 2 пакета)"
+    else:
+        price_text = f"💰 {price} ₽ (фиксированная цена за {bags} пакетов)"
+    
+    # Текст об оплате
+    payment_names = {
+        'cash': '💵 Наличные курьеру',
+        'card': '💳 Перевод на карту курьера',
+        'yookassa': '💰 Онлайн-оплата'
+    }
+    payment_text = f"💳 Оплата: {payment_names.get(payment_method, 'Неизвестно')}"
+    
+    from keyboards.client_keyboards import get_main_keyboard
+    is_admin = user_id in admin_data['admins']
+    
+    # Отправляем подтверждение пользователю
+    await query.edit_message_text(
+        f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
+        f"👤 {name}\n"
+        f"📞 {phone}\n"
+        f"📍 {full_address}\n"
+        f"📅 {order_date} {order_time}\n"
+        f"🛍 {bags} пакетов\n"
+        f"{price_text}\n"
+        f"{payment_text}\n\n"
+        f"🚶‍♂️ <b>Что дальше?</b>\n"
+        f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
+        f"Подтверждение заказа придёт отдельно.",
+        parse_mode='HTML',
+        reply_markup=get_main_keyboard(is_admin)
+    )
+    
+    # Уведомление админам
+    for admin_id in admin_data['admins']:
+        try:
+            await notify_admin(update, context, admin_id, order_id)
+        except Exception as e:
+            print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
+    
+    # Очищаем данные пользователя
+    if user_id in user_data:
+        del user_data[user_id]
+    
+    return ConversationHandler.END
+
 async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
     """Переход к оплате после выбора количества мешков"""
     user_id = update.effective_user.id
