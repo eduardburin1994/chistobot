@@ -494,4 +494,3 @@ async def main(set_webhook=True):
         await app.initialize()
         await app.start()
         return app
-    #dskdkasdadaksdasdasdfkldfdkf
