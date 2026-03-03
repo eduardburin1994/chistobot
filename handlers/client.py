@@ -583,11 +583,16 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if free_places == 0:
         print(f"❌ Время {selected_time} уже полностью занято!")
         keyboard = create_date_keyboard()
-        await query.edit_message_text(
-            "❌ К сожалению, это время только что заняли.\n"
-            "Пожалуйста, выберите другое время:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        try:
+            await query.edit_message_text(
+                "❌ К сожалению, это время только что заняли.\n"
+                "Пожалуйста, выберите другое время:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                print(f"Ошибка в time_callback (занятое время): {e}")
+        
         if user_id in user_data:
             del user_data[user_id]
         return DATE
@@ -595,11 +600,16 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ПОКАЗЫВАЕМ КНОПКИ С КОЛИЧЕСТВОМ МЕШКОВ
     from keyboards.client_keyboards import get_bags_keyboard
     
-    await query.edit_message_text(
-        f"📅 {user_data[user_id]['order_date']} {selected_time}\n\n"
-        f"🛍 Шаг 3: Сколько мешков нужно вынести? (до 15 кг суммарно)",
-        reply_markup=get_bags_keyboard()
-    )
+    try:
+        await query.edit_message_text(
+            f"📅 {user_data[user_id]['order_date']} {selected_time}\n\n"
+            f"🛍 Шаг 3: Сколько мешков нужно вынести? (до 15 кг суммарно)",
+            reply_markup=get_bags_keyboard()
+        )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            print(f"Ошибка в time_callback: {e}")
+    
     return BAGS  # Оставляем то же состояние
 
 async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -618,23 +628,32 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     # Если выбрана онлайн-оплата - показываем заглушку
     if payment_method == 'yookassa':
-        await query.edit_message_text(
-            "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
-            "🔧 Мы работаем над подключением этого способа.\n"
-            "Пожалуйста, выберите другой способ оплаты:\n"
-            "• 💵 Наличные курьеру\n"
-            "• 💳 Перевод на карту курьера\n\n"
-            "Приносим извинения за неудобства!",
-            parse_mode='HTML',
-            reply_markup=get_payment_keyboard()
-        )
+        try:
+            await query.edit_message_text(
+                "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
+                "🔧 Мы работаем над подключением этого способа.\n"
+                "Пожалуйста, выберите другой способ оплаты:\n"
+                "• 💵 Наличные курьеру\n"
+                "• 💳 Перевод на карту курьера\n\n"
+                "Приносим извинения за неудобства!",
+                parse_mode='HTML',
+                reply_markup=get_payment_keyboard()
+            )
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                print(f"Ошибка в payment_method_handler (онлайн-оплата): {e}")
         return PAYMENT_METHOD
     
     user_data[user_id]['payment_method'] = payment_method
     
     # ВМЕСТО запроса количества мешков, ПОКАЗЫВАЕМ ПОДТВЕРЖДЕНИЕ
-    from handlers.client import confirm_order_before_final
-    await confirm_order_before_final(update, context)
+    try:
+        from handlers.client import confirm_order_before_final
+        await confirm_order_before_final(update, context)
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            print(f"Ошибка в payment_method_handler: {e}")
+    
     return CONFIRM_ORDER  # Возвращаем новое состояние
     
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -737,7 +756,7 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
         'yookassa': '💰 Онлайн'
     }
     
-    # Функция склонения (если ещё не определена)
+    # Функция склонения
     def get_bag_word(count):
         if count == 1:
             return "мешок"
@@ -764,8 +783,14 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
         ]
     ]
     
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-    # Нужно добавить новую константу CONFIRM_ORDER в constants.py
+    # Добавляем try-except для игнорирования ошибки "Message is not modified"
+    try:
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            # Если это другая ошибка - выводим в лог
+            print(f"Ошибка в confirm_order_before_final: {e}")
+    
     return CONFIRM_ORDER
 
 async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
