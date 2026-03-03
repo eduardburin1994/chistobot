@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 from config import admin_data
 import datetime
-from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
+from constants import BLACKLIST_REMOVE, BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
 
 # Константы для пагинации
 ORDERS_PER_PAGE = 5
@@ -331,15 +331,9 @@ async def blacklist_remove_user(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка удаления из ЧС"""
-<<<<<<< HEAD
     user_id = update.effective_user.id
     
     if user_id not in admin_data['admins']:
-=======
-    admin_id = update.effective_user.id
-    
-    if admin_id not in admin_data['admins']:
->>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
         await update.message.reply_text("⛔ Доступ запрещён")
         return ConversationHandler.END
     
@@ -350,11 +344,7 @@ async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT
         db.remove_from_blacklist(target_user_id)
         
         # Также удаляем из admin_data['blocked_users'] если есть
-<<<<<<< HEAD
         if target_user_id in admin_data['blocked_users']:
-=======
-        if target_user_id in admin_data.get('blocked_users', []):
->>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
             admin_data['blocked_users'].remove(target_user_id)
         
         await update.message.reply_text(
