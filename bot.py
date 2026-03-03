@@ -33,8 +33,6 @@ from handlers.common import (
     handle_new_chat_members, handle_text_message  # ← ДОБАВЬ ЭТО
 )
 
-)
-
 # Константа для редактирования цен
 EDITING_PRICE = 100
 
