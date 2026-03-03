@@ -83,7 +83,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return WELCOME
 
-# ... (остальные функции без изменений) ...
+async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка ответа на приветствие"""
+    query = update.callback_query
+    await query.answer()
+    
+    # В любом случае показываем главное меню
+    user_id = query.from_user.id
+    keyboard = get_main_keyboard(user_id in admin_data['admins'])
+    
+    # Разный текст в зависимости от ответа
+    if query.data == 'welcome_yes':
+        text = "Отлично! 🎉 Давайте начнём. Выберите действие в меню:"
+    else:
+        text = "Хорошо, если передумаете — я здесь! 😉\n\nВыберите действие в меню:"
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=keyboard
+    )
+    return ConversationHandler.END
 
 async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать правила с информацией о зоне обслуживания"""
