@@ -27,6 +27,21 @@ def create_date_keyboard():
     
     return keyboard
 
+def get_bags_keyboard():
+    """Клавиатура для выбора количества мешков"""
+    keyboard = [
+        [
+            InlineKeyboardButton("1 мешок", callback_data='bags_1'),
+            InlineKeyboardButton("2 мешка", callback_data='bags_2')
+        ],
+        [
+            InlineKeyboardButton("3 мешка", callback_data='bags_3'),
+            InlineKeyboardButton("4 мешка", callback_data='bags_4')
+        ],
+        [InlineKeyboardButton("◀️ Отмена заказа", callback_data='back_to_menu')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 def get_main_keyboard(is_admin=False):
     """Главное меню (компактная версия)"""
     keyboard = [

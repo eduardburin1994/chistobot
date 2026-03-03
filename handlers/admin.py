@@ -6,11 +6,16 @@ import database as db
 from config import admin_data
 import datetime
 <<<<<<< HEAD
+<<<<<<< HEAD
 from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, BLACKLIST_REMOVE, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
 
 =======
 from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
 >>>>>>> 7cfe0e0b459eb71f4e539e1f5ce0d4bb3039e35c
+=======
+from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, BLACKLIST_REMOVE, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
+
+>>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
 # Константы для пагинации
 ORDERS_PER_PAGE = 5
 ORDER_FILTER_ALL = 'all'
@@ -18,6 +23,20 @@ ORDER_FILTER_NEW = 'new'
 ORDER_FILTER_CONFIRMED = 'confirmed'
 ORDER_FILTER_COMPLETED = 'completed'
 ORDER_FILTER_CANCELLED = 'cancelled'
+
+async def reopen_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Возврат заказа в статус confirmed"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    order_id = int(query.data.replace('reopen_', ''))
+    db.update_order_status(order_id, 'confirmed')
+    
+    # Показываем обновлённый заказ
+    await admin_order_detail(update, context)
 
 async def notify_admin(update, context, admin_id, order_id):
     """Уведомление администратора о новом заказе"""
@@ -135,6 +154,114 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
     except Exception as e:
         print(f"❌ Ошибка отправки уведомления о сообщении админу {admin_id}: {e}")
 
+async def admin_order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Детальный просмотр конкретного заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    # Получаем ID заказа из callback_data
+    order_id = int(query.data.replace('order_detail_', ''))
+    
+    # Получаем заказ из базы
+    order = db.get_order_by_id(order_id)
+    if not order:
+        await query.edit_message_text("❌ Заказ не найден")
+        return
+    
+    # Распаковываем заказ
+    order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+    
+    # Получаем информацию о клиенте
+    user_info = db.get_user_by_id(user_id)
+    username = user_info[1] if user_info else None
+    
+    # Формируем полный адрес
+    full_address = street
+    details = []
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apt and apt not in ['0', '-']:
+        details.append(f"кв. {apt}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    # Статус
+    status_emoji = {
+        'new': '🆕', 
+        'confirmed': '✅', 
+        'completed': '✅', 
+        'cancelled': '❌'
+    }.get(status, '📝')
+    
+    status_text = {
+        'new': 'Новый',
+        'confirmed': 'Подтверждён',
+        'completed': 'Выполнен',
+        'cancelled': 'Отменён'
+    }.get(status, status)
+    
+    # Формируем детальную информацию
+    text = (
+        f"{status_emoji} <b>ЗАКАЗ #{order_id}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Клиент:</b> {name}\n"
+        f"📞 <b>Телефон:</b> {phone}\n"
+        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+    )
+    
+    if username and username != "неизвестно":
+        clean_username = username.replace('@', '')
+        text += f"📱 <b>Username:</b> <a href='https://t.me/{clean_username}'>@{username}</a>\n"
+    
+    text += (
+        f"📍 <b>Адрес:</b> {full_address}\n"
+        f"📅 <b>Дата:</b> {date}\n"
+        f"⏰ <b>Время:</b> {time}\n"
+        f"🛍 <b>Пакетов:</b> {bags}\n"
+        f"💰 <b>Сумма:</b> {price} ₽\n"
+        f"📊 <b>Статус:</b> {status_emoji} {status_text}\n"
+        f"📝 <b>Создан:</b> {created}\n"
+    )
+    
+    # Кнопки действий
+    keyboard = []
+    
+    # Кнопки связи
+    contact_row = []
+    if username and username != "неизвестно":
+        clean_username = username.replace('@', '')
+        contact_row.append(InlineKeyboardButton("💬 В Telegram", url=f"https://t.me/{clean_username}"))
+    contact_row.append(InlineKeyboardButton("✏️ По ID", callback_data=f'write_to_user_{user_id}'))
+    keyboard.append(contact_row)
+    
+    # Кнопки управления статусом
+    if status == 'new':
+        keyboard.append([
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f'confirm_{order_id}'),
+            InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+        ])
+        keyboard.append([InlineKeyboardButton("✅ Выполнить", callback_data=f'complete_{order_id}')])
+    elif status == 'confirmed':
+        keyboard.append([
+            InlineKeyboardButton("✅ Выполнить", callback_data=f'complete_{order_id}'),
+            InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+        ])
+    elif status == 'completed':
+        keyboard.append([InlineKeyboardButton("↩️ Вернуть в работу", callback_data=f'reopen_{order_id}')])
+    
+    # Кнопка назад
+    keyboard.append([InlineKeyboardButton("◀️ Назад к списку", callback_data='admin_orders')])
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 # =============== ЧЕРНЫЙ СПИСОК ===============
 
 async def admin_blacklist_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -213,9 +340,15 @@ async def blacklist_remove_user(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка удаления из ЧС"""
+<<<<<<< HEAD
     user_id = update.effective_user.id
     
     if user_id not in admin_data['admins']:
+=======
+    admin_id = update.effective_user.id
+    
+    if admin_id not in admin_data['admins']:
+>>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
         await update.message.reply_text("⛔ Доступ запрещён")
         return ConversationHandler.END
     
@@ -226,7 +359,11 @@ async def blacklist_remove_process(update: Update, context: ContextTypes.DEFAULT
         db.remove_from_blacklist(target_user_id)
         
         # Также удаляем из admin_data['blocked_users'] если есть
+<<<<<<< HEAD
         if target_user_id in admin_data['blocked_users']:
+=======
+        if target_user_id in admin_data.get('blocked_users', []):
+>>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
             admin_data['blocked_users'].remove(target_user_id)
         
         await update.message.reply_text(
@@ -1034,7 +1171,7 @@ async def toggle_test_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр заказов с пагинацией и фильтрацией"""
+    """Просмотр заказов с пагинацией и фильтрацией (компактный вид)"""
     query = update.callback_query
     await query.answer()
     
@@ -1047,57 +1184,40 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Определяем текущую страницу и фильтр
     if data == 'admin_orders':
-        # Первый вход — показываем все заказы, страница 0
         page = 0
         filter_type = ORDER_FILTER_ALL
     elif data.startswith('orders_page_'):
-        # Формат: orders_page_2_new или orders_page_0_all
         parts = data.replace('orders_page_', '').split('_')
         page = int(parts[0])
         filter_type = parts[1] if len(parts) > 1 else ORDER_FILTER_ALL
     elif data.startswith('orders_filter_'):
-        # Смена фильтра
         filter_type = data.replace('orders_filter_', '')
         page = 0
     else:
         page = 0
         filter_type = ORDER_FILTER_ALL
     
-    # Сохраняем в context.user_data для возврата
     context.user_data['orders_page'] = page
     context.user_data['orders_filter'] = filter_type
     
-    # Получаем все заказы
     all_orders = db.get_all_orders()
     
     # Фильтруем по статусу
-    if filter_type == ORDER_FILTER_ALL:
-        filtered_orders = all_orders
-        filter_name = "📋 ВСЕ ЗАКАЗЫ"
-    elif filter_type == ORDER_FILTER_NEW:
-        filtered_orders = [o for o in all_orders if o[13] == 'new']
-        filter_name = "🆕 НОВЫЕ"
-    elif filter_type == ORDER_FILTER_CONFIRMED:
-        filtered_orders = [o for o in all_orders if o[13] == 'confirmed']
-        filter_name = "✅ ПОДТВЕРЖДЁННЫЕ"
-    elif filter_type == ORDER_FILTER_COMPLETED:
-        filtered_orders = [o for o in all_orders if o[13] == 'completed']
-        filter_name = "✅ ВЫПОЛНЕННЫЕ"
-    elif filter_type == ORDER_FILTER_CANCELLED:
-        filtered_orders = [o for o in all_orders if o[13] == 'cancelled']
-        filter_name = "❌ ОТМЕНЁННЫЕ"
-    else:
-        filtered_orders = all_orders
-        filter_name = "📋 ВСЕ ЗАКАЗЫ"
+    filter_config = {
+        ORDER_FILTER_ALL: (all_orders, "📋 ВСЕ ЗАКАЗЫ"),
+        ORDER_FILTER_NEW: ([o for o in all_orders if o[13] == 'new'], "🆕 НОВЫЕ"),
+        ORDER_FILTER_CONFIRMED: ([o for o in all_orders if o[13] == 'confirmed'], "✅ ПОДТВЕРЖДЁННЫЕ"),
+        ORDER_FILTER_COMPLETED: ([o for o in all_orders if o[13] == 'completed'], "✅ ВЫПОЛНЕННЫЕ"),
+        ORDER_FILTER_CANCELLED: ([o for o in all_orders if o[13] == 'cancelled'], "❌ ОТМЕНЁННЫЕ"),
+    }
+    
+    filtered_orders, filter_name = filter_config.get(filter_type, (all_orders, "📋 ВСЕ ЗАКАЗЫ"))
     
     total_orders = len(filtered_orders)
     total_pages = (total_orders + ORDERS_PER_PAGE - 1) // ORDERS_PER_PAGE
     
     # Корректируем страницу
-    if page >= total_pages and total_pages > 0:
-        page = total_pages - 1
-    if page < 0:
-        page = 0
+    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
     
     start_idx = page * ORDERS_PER_PAGE
     end_idx = min(start_idx + ORDERS_PER_PAGE, total_orders)
@@ -1105,8 +1225,6 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Если нет заказов
     if total_orders == 0:
         text = f"{filter_name}\n\n📭 Нет заказов в этой категории"
-        
-        # Кнопки фильтров
         keyboard = [
             [
                 InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
@@ -1120,23 +1238,18 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup')],
             [InlineKeyboardButton("◀️ Назад", callback_data='admin')]
         ]
-        
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # Формируем заголовок
-    text = f"{filter_name} | {page+1}/{total_pages} | {total_orders} заказов\n\n"
+    # ЗАГОЛОВОК
+    text = f"🔍 <b>{filter_name}</b> | {page+1}/{total_pages} | {total_orders} зак.\n\n"
     
-    # Показываем заказы на текущей странице
+    # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ
+    current_orders = []
     for i, order in enumerate(filtered_orders[start_idx:end_idx], 1):
         order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+        current_orders.append(order_id)
         
-        # Формируем адрес кратко
-        full_address = street
-        if apt:
-            full_address += f" кв.{apt}"
-        
-        # Статус эмодзи
         status_emoji = {
             'new': '🆕', 
             'confirmed': '✅', 
@@ -1144,24 +1257,34 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'cancelled': '❌'
         }.get(status, '📝')
         
-        text += f"{status_emoji} <b>#{order_id}</b> {name}\n"
-        text += f"  📍 {full_address}\n"
-        text += f"  📅 {date} {time} | {bags}меш | {price}₽\n\n"
+        # Короткий адрес
+        short_address = street.split(',')[0][:20]
+        if apt and apt not in ['0', '-']:
+            short_address += f" кв.{apt}"
+        
+        # Текст заказа (номер НЕ кликабельный в тексте)
+        text += f"{status_emoji} #{order_id} {name[:15]} | {short_address} | {bags}меш | {price}₽\n"
+        text += f"   📅 {date} {time} | 👤 ID{user_id}\n\n"
+    
+    # СОЗДАЕМ КЛАВИАТУРУ
+    keyboard = []
     
     # Кнопки фильтров (первый ряд)
-    keyboard = [
-        [
-            InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
-            InlineKeyboardButton("✅ Подтв.", callback_data='orders_filter_confirmed')
-        ],
-        [
-            InlineKeyboardButton("✅ Выполн.", callback_data='orders_filter_completed'),
-            InlineKeyboardButton("❌ Отмен.", callback_data='orders_filter_cancelled')
-        ],
-        [InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')]
-    ]
+    keyboard.append([
+        InlineKeyboardButton("🆕 Новые", callback_data='orders_filter_new'),
+        InlineKeyboardButton("✅ Подтв.", callback_data='orders_filter_confirmed')
+    ])
+    keyboard.append([
+        InlineKeyboardButton("✅ Выполн.", callback_data='orders_filter_completed'),
+        InlineKeyboardButton("❌ Отмен.", callback_data='orders_filter_cancelled')
+    ])
+    keyboard.append([InlineKeyboardButton("📋 Все заказы", callback_data='orders_filter_all')])
     
-    # Кнопки пагинации (второй ряд)
+    # Кнопки для каждого заказа (переход к деталям)
+    for order_id in current_orders:
+        keyboard.append([InlineKeyboardButton(f"🔍 Заказ #{order_id}", callback_data=f'order_detail_{order_id}')])
+    
+    # Кнопки пагинации
     nav_buttons = []
     if page > 0:
         nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f'orders_page_{page-1}_{filter_type}'))
@@ -1171,13 +1294,19 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if nav_buttons:
         keyboard.append(nav_buttons)
     
-    # Кнопки действий (третий ряд)
+    # Кнопки действий
     keyboard.append([
         InlineKeyboardButton("🗑 Очистка", callback_data='admin_orders_cleanup'),
         InlineKeyboardButton("◀️ Назад", callback_data='admin')
     ])
     
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    # Отправляем сообщение
+    try:
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        # Если сообщение не изменилось, просто игнорируем
+        if "Message is not modified" not in str(e):
+            print(f"Ошибка: {e}")
 
 async def admin_orders_cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Очистка старых/выполненных заказов"""

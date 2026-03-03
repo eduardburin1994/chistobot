@@ -2,6 +2,9 @@
 import logging
 import asyncio
 import warnings
+from handlers.client import bags_callback
+from keyboards.client_keyboards import get_bags_keyboard
+from handlers.admin import admin_order_detail, reopen_order
 from telegram.warnings import PTBUserWarning
 warnings.filterwarnings("ignore", message="Fetching updates got a asyncio.CancelledError")
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,11 +16,12 @@ from handlers.client import (
     get_name, get_phone, get_intercom, date_callback, time_callback, get_bags, 
     support_start, support_message, start_order, check_address_handler, 
     new_address, new_entrance, new_floor, new_apartment, new_intercom,
-    my_orders_detail, order_detail_select, favorite_addresses_menu, favorite_add,
-    favorite_save, favorite_delete_menu, favorite_delete, choose_address, 
+    my_orders_detail, order_detail_select, favorite_addresses_menu,
+    favorite_add, favorite_save, favorite_delete_menu, favorite_delete, choose_address, 
     select_favorite_address, new_address_start, manage_favorites, edit_favorite_menu,
     edit_favorite_name, save_favorite_name, delete_favorite_confirm, confirm_delete_favorite,
-    favorite_add_after_order, payment_method_handler, back_to_bags, order_detail
+    favorite_add_after_order, payment_method_handler, back_to_bags, order_detail,
+    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order  # ← ДОБАВЛЕНО final_confirm_order
 )
 from handlers.admin import (
     handle_admin_actions, admin_panel, admin_orders, admin_clients, 
@@ -58,6 +62,30 @@ async def button_handler(update: Update, context):
     if db.is_user_blacklisted(user_id) and query.data not in ['rules', 'prices']:
         await query.edit_message_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
+
+    # Детали заказа
+    if query.data.startswith('order_detail_'):
+        await admin_order_detail(update, context)
+        return ConversationHandler.END
+
+    # Возврат заказа в работу
+    if query.data.startswith('reopen_'):
+        await reopen_order(update, context)
+        return ConversationHandler.END
+
+    # Повтор заказа
+    if query.data.startswith('repeat_order_'):
+        from handlers.client import repeat_order
+        await repeat_order(update, context)
+        return ConversationHandler.END
+    
+    # ===== ДОБАВЬТЕ ЭТОТ БЛОК =====
+    # Подтверждение заказа
+    if query.data == 'final_confirm':
+        from handlers.client import final_confirm_order
+        await final_confirm_order(update, context)
+        return ConversationHandler.END
+    # ===============================
     
     # Обработка кнопок приветствия
     if query.data in ['welcome_yes', 'welcome_no']:
@@ -333,10 +361,14 @@ async def main(set_webhook=True):
             DATE: [CallbackQueryHandler(date_callback, pattern='^date_')],
             TIME: [CallbackQueryHandler(time_callback, pattern='^time_')],
             PAYMENT_METHOD: [CallbackQueryHandler(payment_method_handler, pattern='^pay_')],
-            BAGS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags)],
-        },
+            BAGS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_bags),
+                CallbackQueryHandler(bags_callback, pattern='^bags_')
+        ],
+            CONFIRM_ORDER: [CallbackQueryHandler(confirm_order_before_final, pattern='^final_confirm$')],  # НОВОЕ
+    },
         fallbacks=[CommandHandler('cancel', cancel_command)]
-    )
+)
 
     # ConversationHandler для отправки сообщений клиенту
     message_to_user_handler = ConversationHandler(
@@ -372,6 +404,7 @@ async def main(set_webhook=True):
     )
     
     # ConversationHandler для черного списка (с добавлением удаления)
+<<<<<<< HEAD
     blacklist_handler = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
@@ -384,6 +417,20 @@ async def main(set_webhook=True):
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
 
+=======
+blacklist_handler = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
+        CallbackQueryHandler(blacklist_remove_user, pattern='^blacklist_remove_user$')
+    ],
+    states={
+        BLACKLIST_ADD: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_add_process)],
+        BLACKLIST_REMOVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, blacklist_remove_process)]
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)]
+)
+    
+>>>>>>> 175dc0a63197d683cbbb0c2ffe8d6daf86810562
     # ConversationHandler для рассылки
     broadcast_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(broadcast_new, pattern='^broadcast_new$')],
