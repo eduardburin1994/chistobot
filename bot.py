@@ -78,14 +78,14 @@ async def button_handler(update: Update, context):
         from handlers.client import repeat_order
         await repeat_order(update, context)
         return ConversationHandler.END
-
-    # ========== ДОБАВЬТЕ ЭТОТ БЛОК ==========
+    
+    # ===== ДОБАВЬТЕ ЭТОТ БЛОК =====
     # Подтверждение заказа
     if query.data == 'final_confirm':
         from handlers.client import final_confirm_order
         await final_confirm_order(update, context)
         return ConversationHandler.END
-    # ========================================
+    # ===============================
     
     # Обработка кнопок приветствия
     if query.data in ['welcome_yes', 'welcome_no']:
