@@ -1,12 +1,11 @@
 # handlers/admin.py
-from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
 from config import admin_data, WORK_HOURS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 from config import admin_data
 import datetime
-from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END
+from constants import BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
 
 async def notify_admin(update, context, admin_id, order_id):
     """Уведомление администратора о новом заказе"""
@@ -86,10 +85,9 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
             f"🆔 {user_id}\n"
         )
         
-        # Безопасно проверяем username
-        if username and username != "неизвестно" and username != "нет username" and username != "None":
-            clean_username = str(username).replace('@', '')
-            text += f"📱 <a href='https://t.me/{clean_username}'>@{clean_username}</a>\n"
+        if username and username != "неизвестно":
+            clean_username = username.replace('@', '')
+            text += f"📱 <a href='https://t.me/{clean_username}'>@{username}</a>\n"
         else:
             text += f"📱 нет username\n"
         
@@ -101,8 +99,8 @@ async def notify_admin_about_message(update, context, admin_id, user_id, usernam
         keyboard = []
         
         # Если есть username - ссылка на Telegram
-        if username and username != "неизвестно" and username != "нет username" and username != "None":
-            clean_username = str(username).replace('@', '')
+        if username and username != "неизвестно":
+            clean_username = username.replace('@', '')
             keyboard.append([InlineKeyboardButton("💬 Ответить в Telegram", url=f"https://t.me/{clean_username}")])
         
         # Кнопка "Отметить как прочитано"
@@ -327,13 +325,49 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Админ-панель с улучшенным меню"""
-    # ... (начало функции без изменений) ...
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.answer("⛔ Доступ запрещен", show_alert=True)
+        return
+    
+    await query.answer()
+    
+    orders = db.get_all_orders()
+    clients = db.get_all_users()
+    messages = db.get_all_messages()
+    new_messages = sum(1 for m in messages if len(m) > 7 and m[7] == 'new') if messages else 0
+    active_users = len([c for c in clients if c[0] not in admin_data['blocked_users']])
+    
+    test_status = "🧪 ВКЛ" if admin_data.get('test_mode', False) else "✅ ВЫКЛ"
+    
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    today_orders = [o for o in orders if o[9] == today] if orders else []
+    
+    text = (
+        f"👑 <b>СУПЕР-АДМИН ПАНЕЛЬ</b>\n\n"
+        f"🧪 <b>Тестовый режим:</b> {test_status}\n\n"
+        f"📊 <b>Краткая статистика:</b>\n"
+        f"• 📦 Заказов сегодня: {len(today_orders)}\n"
+        f"• 👥 Всего клиентов: {len(clients)} (🟢 {active_users} активных)\n"
+        f"• 💬 Новых сообщений: {new_messages}\n\n"
+        f"💰 <b>Текущие цены:</b>\n"
+        f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
+        f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
+        f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
+        f"<b>Выберите раздел:</b>"
+    )
     
     keyboard = [
         [InlineKeyboardButton("📦 Управление заказами", callback_data='admin_orders')],
         [InlineKeyboardButton("👥 Управление клиентами", callback_data='admin_clients')],
         [InlineKeyboardButton("💬 Вопросы от клиентов", callback_data='admin_messages')],
-        [InlineKeyboardButton("📢 Написать клиенту", callback_data='admin_write_to_user')],  # ← НОВАЯ КНОПКА
+        [InlineKeyboardButton("📢 Написать клиенту", callback_data='admin_write_to_user')],
         [InlineKeyboardButton("💰 ИЗМЕНИТЬ ЦЕНЫ", callback_data='admin_prices_menu')],
         [InlineKeyboardButton("⏰ ВРЕМЯ РАБОТЫ", callback_data='admin_working_hours')],
         [InlineKeyboardButton("📢 МАССОВАЯ РАССЫЛКА", callback_data='admin_broadcast')],
@@ -344,8 +378,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
     ]
-    
-    # ... (остальной код функции) ...
     
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -755,6 +787,158 @@ async def set_working_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return ConversationHandler.END
 
+# =============== ОТПРАВКА СООБЩЕНИЙ КЛИЕНТАМ ===============
+
+async def admin_write_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало отправки сообщения клиенту по ID"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    # Если передан конкретный user_id (из кнопки)
+    data = query.data
+    if data.startswith('write_to_user_'):
+        user_id = int(data.replace('write_to_user_', ''))
+        context.user_data['write_to_user_id'] = user_id
+        
+        # Получаем информацию о пользователе
+        user_info = db.get_user_by_id(user_id)
+        if user_info:
+            name = user_info[2] or user_info[1] or f"ID {user_id}"
+            await query.edit_message_text(
+                f"✏️ <b>Написать пользователю {name}</b>\n\n"
+                f"🆔 ID: <code>{user_id}</code>\n"
+                f"📞 Телефон: {user_info[4] or 'не указан'}\n\n"
+                f"Введите текст сообщения для отправки:",
+                parse_mode='HTML'
+            )
+            return SEND_MESSAGE_TO_USER
+        else:
+            await query.edit_message_text(
+                "❌ Пользователь не найден",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Назад", callback_data='admin_clients')
+                ]])
+            )
+            return ConversationHandler.END
+    
+    # Если просто вызвали команду (без ID)
+    await query.edit_message_text(
+        "✏️ <b>Отправка сообщения клиенту</b>\n\n"
+        "Введите ID пользователя, которому хотите написать:",
+        parse_mode='HTML'
+    )
+    return ENTER_USER_ID_FOR_MESSAGE
+
+async def enter_user_id_for_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение ID пользователя для отправки сообщения"""
+    user_id = update.effective_user.id
+    
+    if user_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    try:
+        target_user_id = int(update.message.text.strip())
+        context.user_data['write_to_user_id'] = target_user_id
+        
+        # Проверяем, есть ли такой пользователь в базе
+        user_info = db.get_user_by_id(target_user_id)
+        
+        if user_info:
+            name = user_info[2] or user_info[1] or f"ID {target_user_id}"
+            await update.message.reply_text(
+                f"✏️ <b>Написать пользователю {name}</b>\n\n"
+                f"🆔 ID: <code>{target_user_id}</code>\n"
+                f"📞 Телефон: {user_info[4] or 'не указан'}\n\n"
+                f"Введите текст сообщения для отправки:",
+                parse_mode='HTML'
+            )
+            return SEND_MESSAGE_TO_USER
+        else:
+            await update.message.reply_text(
+                "❌ Пользователь с таким ID не найден в базе.\n"
+                "Попробуйте другой ID:",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Отмена", callback_data='admin')
+                ]])
+            )
+            return ENTER_USER_ID_FOR_MESSAGE
+            
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Введите корректный ID (только цифры):"
+        )
+        return ENTER_USER_ID_FOR_MESSAGE
+
+async def send_message_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправка сообщения клиенту"""
+    admin_id = update.effective_user.id
+    
+    if admin_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
+    target_user_id = context.user_data.get('write_to_user_id')
+    message_text = update.message.text
+    
+    if not target_user_id:
+        await update.message.reply_text(
+            "❌ Ошибка: ID пользователя не найден",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В админку", callback_data='admin')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    try:
+        # Отправляем сообщение клиенту
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("💬 Ответить администратору", callback_data='support_write')
+        ]])
+        
+        await context.bot.send_message(
+            chat_id=target_user_id,
+            text=f"📢 <b>Сообщение от администратора</b>\n\n{message_text}",
+            parse_mode='HTML',
+            reply_markup=keyboard
+        )
+        
+        # Сохраняем в историю сообщений
+        db.save_message(target_user_id, f"[ОТ АДМИНА] {message_text}")
+        
+        # Уведомляем админа об успехе
+        await update.message.reply_text(
+            f"✅ <b>Сообщение отправлено!</b>\n\n"
+            f"Пользователю с ID: <code>{target_user_id}</code>\n"
+            f"Текст: {message_text}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В админку", callback_data='admin')
+            ]])
+        )
+        
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ <b>Ошибка отправки</b>\n\n"
+            f"Не удалось отправить сообщение пользователю {target_user_id}.\n"
+            f"Возможно, пользователь не запускал бота или заблокировал его.\n\n"
+            f"Ошибка: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В админку", callback_data='admin')
+            ]])
+        )
+    
+    # Очищаем данные
+    if 'write_to_user_id' in context.user_data:
+        del context.user_data['write_to_user_id']
+    
+    return ConversationHandler.END
+
 # =============== ОСТАЛЬНЫЕ ФУНКЦИИ ===============
 
 async def toggle_test_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -940,7 +1124,7 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Отправляем сообщение для этого клиента
         if i == 0:
-            # Первое сообщение заменяет исходное
+            # Первое сообщение заменяет исходное (но мы уже отправили заголовок)
             await query.message.reply_text(
                 text,
                 parse_mode='HTML',
@@ -956,15 +1140,13 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Добавляем кнопку для возврата в админку
     await query.message.reply_text(
-        "🔍 <b>Всего клиентов:</b> {}\n"
-        "Показаны первые 10.".format(len(clients)),
+        f"🔍 <b>Всего клиентов:</b> {len(clients)}\n"
+        f"Показаны первые 10.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
         ]])
     )
-    
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def show_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать ID пользователя для связи"""
@@ -992,158 +1174,6 @@ async def show_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text,
         parse_mode='HTML'
     )
-# =============== ОТПРАВКА СООБЩЕНИЙ КЛИЕНТАМ ===============
-
-async def admin_write_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало отправки сообщения клиенту по ID"""
-    query = update.callback_query
-    await query.answer()
-    
-    if query.from_user.id not in admin_data['admins']:
-        await query.edit_message_text("⛔ Доступ запрещён")
-        return ConversationHandler.END
-    
-    # Если передан конкретный user_id (из кнопки)
-    data = query.data
-    if data.startswith('write_to_user_'):
-        user_id = int(data.replace('write_to_user_', ''))
-        context.user_data['write_to_user_id'] = user_id
-        
-        # Получаем информацию о пользователе
-        user_info = db.get_user_by_id(user_id)
-        if user_info:
-            name = user_info[2] or user_info[1] or f"ID {user_id}"
-            await query.edit_message_text(
-                f"✏️ <b>Написать пользователю {name}</b>\n\n"
-                f"🆔 ID: <code>{user_id}</code>\n"
-                f"📞 Телефон: {user_info[4] or 'не указан'}\n\n"
-                f"Введите текст сообщения для отправки:",
-                parse_mode='HTML'
-            )
-            return SEND_MESSAGE_TO_USER
-        else:
-            await query.edit_message_text(
-                "❌ Пользователь не найден",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Назад", callback_data='admin_clients')
-                ]])
-            )
-            return ConversationHandler.END
-    
-    # Если просто вызвали команду (без ID)
-    await query.edit_message_text(
-        "✏️ <b>Отправка сообщения клиенту</b>\n\n"
-        "Введите ID пользователя, которому хотите написать:",
-        parse_mode='HTML'
-    )
-    return ENTER_USER_ID_FOR_MESSAGE
-
-async def enter_user_id_for_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение ID пользователя для отправки сообщения"""
-    user_id = update.effective_user.id
-    
-    if user_id not in admin_data['admins']:
-        await update.message.reply_text("⛔ Доступ запрещён")
-        return ConversationHandler.END
-    
-    try:
-        target_user_id = int(update.message.text.strip())
-        context.user_data['write_to_user_id'] = target_user_id
-        
-        # Проверяем, есть ли такой пользователь в базе
-        user_info = db.get_user_by_id(target_user_id)
-        
-        if user_info:
-            name = user_info[2] or user_info[1] or f"ID {target_user_id}"
-            await update.message.reply_text(
-                f"✏️ <b>Написать пользователю {name}</b>\n\n"
-                f"🆔 ID: <code>{target_user_id}</code>\n"
-                f"📞 Телефон: {user_info[4] or 'не указан'}\n\n"
-                f"Введите текст сообщения для отправки:",
-                parse_mode='HTML'
-            )
-            return SEND_MESSAGE_TO_USER
-        else:
-            await update.message.reply_text(
-                "❌ Пользователь с таким ID не найден в базе.\n"
-                "Попробуйте другой ID:",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Отмена", callback_data='admin')
-                ]])
-            )
-            return ENTER_USER_ID_FOR_MESSAGE
-            
-    except ValueError:
-        await update.message.reply_text(
-            "❌ Введите корректный ID (только цифры):"
-        )
-        return ENTER_USER_ID_FOR_MESSAGE
-
-async def send_message_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправка сообщения клиенту"""
-    admin_id = update.effective_user.id
-    
-    if admin_id not in admin_data['admins']:
-        await update.message.reply_text("⛔ Доступ запрещён")
-        return ConversationHandler.END
-    
-    target_user_id = context.user_data.get('write_to_user_id')
-    message_text = update.message.text
-    
-    if not target_user_id:
-        await update.message.reply_text(
-            "❌ Ошибка: ID пользователя не найден",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ В админку", callback_data='admin')
-            ]])
-        )
-        return ConversationHandler.END
-    
-    try:
-        # Отправляем сообщение клиенту
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("💬 Ответить администратору", callback_data='support_write')
-        ]])
-        
-        await context.bot.send_message(
-            chat_id=target_user_id,
-            text=f"📢 <b>Сообщение от администратора</b>\n\n{message_text}",
-            parse_mode='HTML',
-            reply_markup=keyboard
-        )
-        
-        # Сохраняем в историю сообщений
-        db.save_message(target_user_id, f"[ОТ АДМИНА] {message_text}")
-        
-        # Уведомляем админа об успехе
-        await update.message.reply_text(
-            f"✅ <b>Сообщение отправлено!</b>\n\n"
-            f"Пользователю с ID: <code>{target_user_id}</code>\n"
-            f"Текст: {message_text}",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ В админку", callback_data='admin')
-            ]])
-        )
-        
-    except Exception as e:
-        await update.message.reply_text(
-            f"❌ <b>Ошибка отправки</b>\n\n"
-            f"Не удалось отправить сообщение пользователю {target_user_id}.\n"
-            f"Возможно, пользователь не запускал бота или заблокировал его.\n\n"
-            f"Ошибка: {e}",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ В админку", callback_data='admin')
-            ]])
-        )
-    
-    # Очищаем данные
-    if 'write_to_user_id' in context.user_data:
-        del context.user_data['write_to_user_id']
-    
-    return ConversationHandler.END
-
 
 async def admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Просмотр всех сообщений от клиентов"""
