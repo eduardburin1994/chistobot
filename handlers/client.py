@@ -789,6 +789,7 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     
     user_id = query.from_user.id
+    print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")  # ← ДОБАВЬТЕ
     
     # Проверяем, есть ли данные пользователя
     if user_id not in user_data:
@@ -851,6 +852,11 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         price=price,
         payment_method=payment_method
     )
+    
+    print(f"🔍 РЕЗУЛЬТАТ СОЗДАНИЯ ЗАКАЗА: {result}")  # ← ДОБАВЬТЕ
+    
+    if result[0] is False:
+        print(f"❌ ОШИБКА СОЗДАНИЯ ЗАКАЗА: {result[1]}")  # ← ДОБАВЬТЕ
     
     if result[0] is False:
         await query.edit_message_text(
