@@ -1,73 +1,136 @@
-# keyboards/reply_keyboards.py
-from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+# handlers/reply_handlers.py
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, ConversationHandler
+from config import admin_data
+from keyboards.reply_keyboards import get_main_reply_keyboard, get_admin_reply_keyboard, remove_keyboard
+from constants import *
 
-def get_main_reply_keyboard(is_admin=False):
-    """
-    Главная reply-клавиатура (появляется только в главном меню)
-    """
+# Вспомогательный класс для имитации callback_query
+class MockCallbackQuery:
+    """Имитирует объект callback_query для вызова существующих обработчиков"""
+    def __init__(self, data, user_id, message):
+        self.data = data
+        self.from_user = type('', (), {})()
+        self.from_user.id = user_id
+        self.message = message
+        self.id = 'mock_id'
     
-    # Основные кнопки для всех пользователей
-    keyboard = [
-        [
-            KeyboardButton("📦 Заказать вынос"),
-            KeyboardButton("💰 Цены")
-        ],
-        [
-            KeyboardButton("📋 Мои заказы"),
-            KeyboardButton("⭐ Избранное")
-        ],
-        [
-            KeyboardButton("📞 Связаться с нами"),
-            KeyboardButton("📋 Правила")
-        ]
-    ]
-    
-    # Кнопка для админа
-    if is_admin:
-        keyboard.append([KeyboardButton("👑 Админ-панель")])
-    
-    return ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
-        input_field_placeholder="👇 Нажмите кнопку или напишите сообщение...",
-        one_time_keyboard=False
-    )
+    async def answer(self):
+        """Имитирует метод answer() callback_query"""
+        pass
 
-def remove_keyboard():
+async def handle_reply_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Скрыть reply-клавиатуру (используется во время диалогов)
+    Обработка нажатий на reply-кнопки
     """
-    return ReplyKeyboardRemove()
-
-def get_admin_reply_keyboard():
-    """
-    Клавиатура для админ-панели
-    """
-    keyboard = [
-        [
-            KeyboardButton("📦 Заказы"),
-            KeyboardButton("👥 Клиенты")
-        ],
-        [
-            KeyboardButton("💰 Цены"),
-            KeyboardButton("⏰ Время работы")
-        ],
-        [
-            KeyboardButton("📢 Рассылка"),
-            KeyboardButton("🚫 Черный список")
-        ],
-        [
-            KeyboardButton("📊 Статистика"),
-            KeyboardButton("⚙️ Настройки")
-        ],
-        [
-            KeyboardButton("◀️ Назад в главное меню")
-        ]
-    ]
+    text = update.message.text
+    user_id = update.effective_user.id
+    is_admin = user_id in admin_data['admins']
     
-    return ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
-        input_field_placeholder="Админ-меню...",
-        one_time_keyboard=False
-    )
+    print(f"🔘 Нажата reply-кнопка: {text}")
+    
+    # =============== ГЛАВНОЕ МЕНЮ ===============
+    if text == "📦 Заказать вынос":
+        from handlers.client import start_order_reply
+        await start_order_reply(update, context)
+        return
+    
+    elif text == "💰 Цены":
+        from handlers.common import show_prices_reply
+        await show_prices_reply(update, context)
+        return
+    
+    elif text == "📋 Мои заказы":
+        from handlers.client import my_orders_detail_reply
+        await my_orders_detail_reply(update, context)
+        return
+    
+    elif text == "⭐ Избранное":
+        from handlers.client import favorite_addresses_menu_reply
+        await favorite_addresses_menu_reply(update, context)
+        return
+    
+    elif text == "📞 Связаться с нами":
+        from handlers.common import show_contact_reply
+        await show_contact_reply(update, context)
+        return
+    
+    elif text == "📋 Правила":
+        from handlers.common import show_rules_reply
+        await show_rules_reply(update, context)
+        return
+    
+    # =============== АДМИН-МЕНЮ ===============
+    elif text == "👑 Админ-панель" and is_admin:
+        from handlers.admin import admin_panel_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin', user_id, update.message)
+        await admin_panel_reply(update, context)
+        # Меняем клавиатуру на админскую
+        await update.message.reply_text(
+            "👑 Вы в админ-панели. Используйте кнопки ниже:",
+            reply_markup=get_admin_reply_keyboard()
+        )
+        return
+    
+    elif text == "📦 Заказы" and is_admin:
+        from handlers.admin import admin_orders_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_orders', user_id, update.message)
+        await admin_orders_reply(update, context)
+        return
+    
+    elif text == "👥 Клиенты" and is_admin:
+        from handlers.admin import admin_clients_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_clients', user_id, update.message)
+        await admin_clients_reply(update, context)
+        return
+    
+    elif text == "💰 Цены" and is_admin:
+        from handlers.admin import admin_prices_menu_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_prices_menu', user_id, update.message)
+        await admin_prices_menu_reply(update, context)
+        return
+    
+    elif text == "⏰ Время работы" and is_admin:
+        from handlers.admin import admin_working_hours_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_working_hours', user_id, update.message)
+        await admin_working_hours_reply(update, context)
+        return
+    
+    elif text == "📢 Рассылка" and is_admin:
+        from handlers.admin import admin_broadcast_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_broadcast', user_id, update.message)
+        await admin_broadcast_reply(update, context)
+        return
+    
+    elif text == "🚫 Черный список" and is_admin:
+        from handlers.admin import admin_blacklist_menu_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_blacklist', user_id, update.message)
+        await admin_blacklist_menu_reply(update, context)
+        return
+    
+    elif text == "📊 Статистика" and is_admin:
+        from handlers.admin import admin_stats_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_stats', user_id, update.message)
+        await admin_stats_reply(update, context)
+        return
+    
+    elif text == "⚙️ Настройки" and is_admin:
+        from handlers.admin import admin_settings_reply
+        context.bot_data['mock_callback_query'] = MockCallbackQuery('admin_settings', user_id, update.message)
+        await admin_settings_reply(update, context)
+        return
+    
+    elif text == "◀️ Назад в главное меню" and is_admin:
+        # Возврат в главное меню с обычной клавиатурой
+        await update.message.reply_text(
+            "👋 Главное меню:",
+            reply_markup=get_main_reply_keyboard(is_admin)
+        )
+        return
+    
+    else:
+        # Если текст не соответствует ни одной кнопке
+        await update.message.reply_text(
+            "Используйте кнопки внизу экрана для навигации 👇",
+            reply_markup=get_main_reply_keyboard(is_admin)
+        )
