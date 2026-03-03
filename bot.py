@@ -307,6 +307,22 @@ async def main(set_webhook=True):
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
+
+        # ConversationHandler для отправки сообщений клиенту
+    message_to_user_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(admin_write_to_user, pattern='^admin_write_to_user$'),
+            CallbackQueryHandler(admin_write_to_user, pattern='^write_to_user_')
+        ],
+        states={
+            ENTER_USER_ID_FOR_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_user_id_for_message)],
+            SEND_MESSAGE_TO_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, send_message_to_user)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # Добавляем обработчик в список
+    app.add_handler(message_to_user_handler)
     
     # ConversationHandler для избранных адресов (добавление)
     favorite_handler = ConversationHandler(
