@@ -1097,7 +1097,7 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             username_text = "нет username"
         
-        # Формируем текст для одного клиента
+        # Формируем текст для одного клиента  👈 ЭТА СТРОКА С ОТСТУПОМ
         text = (
             f"{block_status} <b>{full_name}</b>\n"
             f"  📱 {username_text}\n"
@@ -1105,23 +1105,23 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"  🆔 <code>{user_id}</code>\n"
             f"  📅 {reg_date}\n"
         )
-        
-        # КНОПКИ ДЛЯ КЛИЕНТА
+
+        # КНОПКИ ДЛЯ КЛИЕНТА  👈 И ЭТА С ОТСТУПОМ
         keyboard = []
-        
-        # Кнопка "Написать сообщение" (всегда доступна)
+
+        # Кнопка "Написать сообщение" (ведёт на ввод ID)
         keyboard.append([InlineKeyboardButton("💬 Написать сообщение", callback_data=f'write_to_user_{user_id}')])
-        
-        # Кнопка "Заблокировать/Разблокировать" (если нужно)
+
+        # Кнопка "Заблокировать/Разблокировать"
         if user_id in admin_data['blocked_users']:
             keyboard.append([InlineKeyboardButton("🔓 Разблокировать", callback_data=f'unblock_user_{user_id}')])
         else:
             keyboard.append([InlineKeyboardButton("🔒 Заблокировать", callback_data=f'block_user_{user_id}')])
-        
-        # Кнопка "Показать ID" (дублирует ID в тексте, но можно оставить)
-        keyboard.append([InlineKeyboardButton("🆔 Копировать ID", callback_data=f'show_user_id_{user_id}')])
-        
-        # Отправляем сообщение для этого клиента
+
+        # ЗАМЕНЯЕМ: была "Копировать ID", теперь "Написать по ID"
+        keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
+
+        # Отправляем сообщение для этого клиента  👈 И ЭТА С ОТСТУПОМ
         if i == 0:
             # Первое сообщение заменяет исходное (но мы уже отправили заголовок)
             await query.message.reply_text(
@@ -1137,7 +1137,7 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
     
-    # Добавляем кнопку для возврата в админку
+    # Добавляем кнопку для возврата в админку  👈 ЭТА СТРОКА НА УРОВНЕ С for
     await query.message.reply_text(
         f"🔍 <b>Всего клиентов:</b> {len(clients)}\n"
         f"Показаны первые 10.",
