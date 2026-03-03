@@ -40,7 +40,7 @@ async def notify_admin(update, context, admin_id, order_id):
         f"📍 {full_address}\n"
         f"📅 {order[9]} {order[10]}\n"
         f"🛍 {order[11]} пакетов\n"
-        f"💰 {order[12]} ₽\n"
+        "💰 {order[12]} ₽\n"
     )
     
     # Кнопки для админа
@@ -1052,12 +1052,13 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Просмотр всех клиентов с активными ссылками и кнопкой для отправки сообщения"""
     query = update.callback_query
     await query.answer()
-    # КНОПКИ ДЛЯ КЛИЕНТА
-keyboard = []  # ← можно добавить комментарий здесь
+    
+    # Проверяем права доступа (СНАЧАЛА проверка!)
     if query.from_user.id not in admin_data['admins']:
         await query.edit_message_text("⛔ Доступ запрещён")
         return
     
+    # ПОТОМ получаем данные
     clients = db.get_all_users()
     
     if not clients:
@@ -1098,7 +1099,7 @@ keyboard = []  # ← можно добавить комментарий здес
         else:
             username_text = "нет username"
         
-        # Формируем текст для одного клиента  👈 ЭТА СТРОКА С ОТСТУПОМ
+        # Формируем текст для одного клиента
         text = (
             f"{block_status} <b>{full_name}</b>\n"
             f"  📱 {username_text}\n"
@@ -1107,7 +1108,7 @@ keyboard = []  # ← можно добавить комментарий здес
             f"  📅 {reg_date}\n"
         )
 
-        # КНОПКИ ДЛЯ КЛИЕНТА  👈 И ЭТА С ОТСТУПОМ
+        # КНОПКИ ДЛЯ КЛИЕНТА
         keyboard = []
 
         # Кнопка "Написать сообщение" (ведёт на ввод ID)
@@ -1119,26 +1120,24 @@ keyboard = []  # ← можно добавить комментарий здес
         else:
             keyboard.append([InlineKeyboardButton("🔒 Заблокировать", callback_data=f'block_user_{user_id}')])
 
-        # ЗАМЕНЯЕМ: была "Копировать ID", теперь "Написать по ID"
+        # Новая кнопка "Написать по ID"
         keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
 
-        # Отправляем сообщение для этого клиента  👈 И ЭТА С ОТСТУПОМ
+        # Отправляем сообщение для этого клиента
         if i == 0:
-            # Первое сообщение заменяет исходное (но мы уже отправили заголовок)
             await query.message.reply_text(
                 text,
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         else:
-            # Остальные отправляем новыми сообщениями
             await query.message.reply_text(
                 text,
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
     
-    # Добавляем кнопку для возврата в админку  👈 ЭТА СТРОКА НА УРОВНЕ С for
+    # Добавляем кнопку для возврата в админку
     await query.message.reply_text(
         f"🔍 <b>Всего клиентов:</b> {len(clients)}\n"
         f"Показаны первые 10.",
