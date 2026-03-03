@@ -1309,6 +1309,56 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("◀️ Назад к списку", callback_data='order_detail_select')]]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+# =============== ВСТАВЬТЕ НОВУЮ ФУНКЦИЮ ЗДЕСЬ ===============
+async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню избранных адресов"""
+    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    if 'mock_callback_query' in context.bot_data:
+        query = context.bot_data['mock_callback_query']
+        del context.bot_data['mock_callback_query']
+    else:
+        query = update.callback_query
+    
+    await query.answer()
+    
+    user_id = query.from_user.id
+    import database as db
+    
+    favorites = db.get_user_favorite_addresses(user_id)
+    
+    text = "⭐ <b>Мои избранные адреса</b>\n\n"
+    
+    if favorites:
+        for addr in favorites[:5]:
+            addr_id, name, street, entrance, floor, apt, intercom, created = addr
+            
+            full = street
+            details = []
+            if entrance:
+                details.append(f"под. {entrance}")
+            if floor:
+                details.append(f"эт. {floor}")
+            if apt:
+                details.append(f"кв. {apt}")
+            if intercom:
+                details.append(f"домофон {intercom}")
+            if details:
+                full += f" ({', '.join(details)})"
+            
+            text += f"🏷 <b>{name}</b>\n📍 {full}\n\n"
+    else:
+        text += "У вас пока нет избранных адресов"
+    
+    keyboard = [
+        [InlineKeyboardButton("➕ Добавить текущий адрес", callback_data='favorite_add')],
+        [InlineKeyboardButton("✏️ Управление адресами", callback_data='manage_favorites')],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 
