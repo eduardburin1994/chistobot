@@ -280,32 +280,52 @@ async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # =============== АВТОМАТИЧЕСКИ ДОБАВЛЯЕМ В ИЗБРАННОЕ ===============
     # Проверяем, не добавлен ли уже этот адрес
+    import database as db
     favorites = db.get_user_favorite_addresses(user_id)
     address_exists = False
     
+    # Сохраняем данные в переменные для удобства
+    street_address = user_data[user_id]['street_address']
+    entrance = user_data[user_id].get('entrance', '')
+    floor = user_data[user_id].get('floor', '')
+    apartment = user_data[user_id].get('apartment', '')
+    intercom = user_data[user_id].get('intercom', '')
+    
+    # Обновляем адрес в базе данных
+    db.update_user_address(
+        user_id,
+        street_address,
+        entrance,
+        floor,
+        apartment,
+        intercom
+    )
+    
+    # Проверяем, есть ли уже такой адрес в избранном
     for fav in favorites:
-        if (fav[2] == user_data[user_id]['street_address'] and  # street_address
-            fav[3] == user_data[user_id].get('entrance', '') and
-            fav[4] == user_data[user_id].get('floor', '') and
-            fav[5] == user_data[user_id].get('apartment', '') and
-            fav[6] == user_data[user_id].get('intercom', '')):
+        if (len(fav) > 6 and
+            fav[2] == street_address and
+            fav[3] == entrance and
+            fav[4] == floor and
+            fav[5] == apartment and
+            fav[6] == intercom):
             address_exists = True
             break
     
     if not address_exists:
-        # Создаём название автоматически
+        # Используем умное название
         default_name = generate_address_name(user_id, street_address, apartment)
         
         db.save_favorite_address(
             user_id,
             default_name,
-            user_data[user_id]['street_address'],
-            user_data[user_id].get('entrance', ''),
-            user_data[user_id].get('floor', ''),
-            user_data[user_id].get('apartment', ''),
-            user_data[user_id].get('intercom', '')
+            street_address,
+            entrance,
+            floor,
+            apartment,
+            intercom
         )
-        print(f"✅ Адрес автоматически добавлен в избранное для пользователя {user_id}")
+        print(f"✅ Адрес автоматически добавлен в избранное для пользователя {user_id} с названием '{default_name}'")
     # =================================================================
     
     # Переходим к выбору даты
