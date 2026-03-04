@@ -4,190 +4,18 @@ import datetime
 import psycopg2
 import psycopg2.extras
 from urllib.parse import urlparse
-
-# =============== РЕФЕРАЛЬНАЯ СИСТЕМА ===============
-
 import random
 import string
 
-# =============== ФУНКЦИИ ДЛЯ КУРЬЕРОВ ===============
+# =============== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ МОСКОВСКОГО ВРЕМЕНИ ===============
+def moscow_now():
+    """Возвращает текущее московское время (UTC+3)"""
+    return datetime.datetime.now() + datetime.timedelta(hours=3)
 
-def get_courier_active_orders():
-    """Получает активные заказы (new и confirmed) на сегодня и завтра"""
-    conn = get_connection()
-    if not conn:
-        return []
-    
-    cur = conn.cursor()
-    try:
-        today = now = datetime.datetime.now() + datetime.timedelta(hours=3).strftime("%d.%m.%Y")
-        tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
-        
-        cur.execute('''
-            SELECT order_id, user_id, client_name, phone, street_address, 
-                   entrance, floor, apartment, intercom, order_date, order_time, 
-                   bags_count, price, status, courier_id
-            FROM orders
-            WHERE status IN ('new', 'confirmed') 
-              AND order_date IN (%s, %s)
-            ORDER BY order_date, order_time
-        ''', (today, tomorrow))
-        
-        orders = cur.fetchall()
-        return orders
-    except Exception as e:
-        print(f"❌ Ошибка получения активных заказов: {e}")
-        return []
-    finally:
-        cur.close()
-        conn.close()
+# Получаем строку подключения из переменной окружения
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-def assign_courier_to_order(order_id, courier_id):
-    """Назначает курьера на заказ и меняет статус на confirmed"""
-    conn = get_connection()
-    if not conn:
-        return
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            UPDATE orders 
-            SET status = 'confirmed', courier_id = %s, taken_at = %s 
-            WHERE order_id = %s
-        ''', (courier_id, dnow = datetime.datetime.now() + datetime.timedelta(hours=3), order_id))
-        conn.commit()
-        print(f"✅ Курьер {courier_id} назначен на заказ #{order_id}")
-    except Exception as e:
-        print(f"❌ Ошибка назначения курьера: {e}")
-    finally:
-        cur.close()
-        conn.close()
-
-def get_courier_completed_orders(courier_id, limit=10):
-    """Получает историю выполненных заказов курьера"""
-    conn = get_connection()
-    if not conn:
-        return []
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            SELECT order_id, order_date, order_time, bags_count, price
-            FROM orders
-            WHERE status = 'completed' AND courier_id = %s
-            ORDER BY completed_at DESC
-            LIMIT %s
-        ''', (courier_id, limit))
-        orders = cur.fetchall()
-        return orders
-    except Exception as e:
-        print(f"❌ Ошибка получения истории: {e}")
-        return []
-    finally:
-        cur.close()
-        conn.close()
-
-def get_courier_stats(courier_id):
-    """Общая статистика курьера"""
-    conn = get_connection()
-    if not conn:
-        return {'total': 0, 'bags': 0, 'earned': 0}
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
-            FROM orders
-            WHERE status = 'completed' AND courier_id = %s
-        ''', (courier_id,))
-        total, bags, earned = cur.fetchone()
-        return {'total': total, 'bags': bags, 'earned': earned}
-    except Exception as e:
-        print(f"❌ Ошибка получения статистики: {e}")
-        return {'total': 0, 'bags': 0, 'earned': 0}
-    finally:
-        cur.close()
-        conn.close()
-
-def get_courier_daily_stats(courier_id, date):
-    """Статистика курьера за конкретный день"""
-    conn = get_connection()
-    if not conn:
-        return {'completed': 0, 'bags': 0, 'earned': 0}
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
-            FROM orders
-            WHERE status = 'completed' 
-              AND courier_id = %s 
-              AND order_date = %s
-        ''', (courier_id, date))
-        completed, bags, earned = cur.fetchone()
-        return {'completed': completed, 'bags': bags, 'earned': earned}
-    except Exception as e:
-        print(f"❌ Ошибка получения дневной статистики: {e}")
-        return {'completed': 0, 'bags': 0, 'earned': 0}
-    finally:
-        cur.close()
-        conn.close()
-
-def get_courier_stats_period(courier_id, start_date, end_date):
-    """Статистика за период"""
-    conn = get_connection()
-    if not conn:
-        return {'total': 0, 'bags': 0, 'earned': 0, 'avg': 0}
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
-            FROM orders
-            WHERE status = 'completed' 
-              AND courier_id = %s 
-              AND order_date BETWEEN %s AND %s
-        ''', (courier_id, start_date, end_date))
-        total, bags, earned = cur.fetchone()
-        avg = earned // total if total > 0 else 0
-        return {'total': total, 'bags': bags, 'earned': earned, 'avg': avg}
-    except Exception as e:
-        print(f"❌ Ошибка получения статистики за период: {e}")
-        return {'total': 0, 'bags': 0, 'earned': 0, 'avg': 0}
-    finally:
-        cur.close()
-        conn.close()
-
-def get_courier_hourly_stats(courier_id):
-    """Статистика по часам (в какое время чаще берут заказы)"""
-    conn = get_connection()
-    if not conn:
-        return {}
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('''
-            SELECT EXTRACT(HOUR FROM taken_at) as hour, COUNT(*)
-            FROM orders
-            WHERE status = 'completed' 
-              AND courier_id = %s 
-              AND taken_at IS NOT NULL
-            GROUP BY hour
-            ORDER BY hour
-        ''', (courier_id,))
-        
-        hourly = {}
-        for row in cur.fetchall():
-            hour = int(row[0])
-            count = row[1]
-            hourly[hour] = count
-        return hourly
-    except Exception as e:
-        print(f"❌ Ошибка получения почасовой статистики: {e}")
-        return {}
-    finally:
-        cur.close()
-        conn.close()
+# =============== РЕФЕРАЛЬНАЯ СИСТЕМА ===============
 
 def init_referral_tables():
     """Создаёт таблицы для реферальной системы"""
@@ -197,7 +25,6 @@ def init_referral_tables():
     
     cur = conn.cursor()
     try:
-        # Добавляем поля в таблицу users
         cur.execute('''
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE,
@@ -208,7 +35,6 @@ def init_referral_tables():
             ADD COLUMN IF NOT EXISTS level2_count INTEGER DEFAULT 0
         ''')
         
-        # Таблица реферальных связей
         cur.execute('''
             CREATE TABLE IF NOT EXISTS referrals (
                 referral_id SERIAL PRIMARY KEY,
@@ -224,20 +50,18 @@ def init_referral_tables():
             )
         ''')
         
-        # Таблица начислений баллов
         cur.execute('''
             CREATE TABLE IF NOT EXISTS referral_earnings (
                 earning_id SERIAL PRIMARY KEY,
                 user_id BIGINT,
                 amount INTEGER,
-                source TEXT, -- 'level1', 'level2', 'bonus'
-                source_id INTEGER, -- ID реферала или заказа
+                source TEXT,
+                source_id INTEGER,
                 created_at TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
         ''')
         
-        # Таблица использования баллов
         cur.execute('''
             CREATE TABLE IF NOT EXISTS referral_spendings (
                 spending_id SERIAL PRIMARY KEY,
@@ -260,24 +84,20 @@ def init_referral_tables():
 
 def generate_referral_code(user_id):
     """Генерирует уникальный реферальный код"""
-    # Формат: CHISTO + первые 4 буквы имени + случайные цифры
     conn = get_connection()
     if not conn:
         return None
     
     cur = conn.cursor()
     try:
-        # Получаем имя пользователя
         cur.execute('SELECT first_name FROM users WHERE user_id = %s', (user_id,))
         user = cur.fetchone()
         name_part = user[0][:4].upper() if user and user[0] else "USER"
         
-        # Генерируем уникальный код
         while True:
             random_part = ''.join(random.choices(string.digits, k=4))
             code = f"CHISTO{name_part}{random_part}"
             
-            # Проверяем уникальность
             cur.execute('SELECT user_id FROM users WHERE referral_code = %s', (code,))
             if not cur.fetchone():
                 return code
@@ -296,14 +116,12 @@ def get_or_create_referral_code(user_id):
     
     cur = conn.cursor()
     try:
-        # Проверяем, есть ли уже код
         cur.execute('SELECT referral_code FROM users WHERE user_id = %s', (user_id,))
         result = cur.fetchone()
         
         if result and result[0]:
             return result[0]
         
-        # Создаём новый код
         code = generate_referral_code(user_id)
         if code:
             cur.execute(
@@ -328,7 +146,6 @@ def register_referral(referral_code, new_user_id):
     
     cur = conn.cursor()
     try:
-        # Находим, кто пригласил
         cur.execute(
             'SELECT user_id FROM users WHERE referral_code = %s',
             (referral_code,)
@@ -340,11 +157,9 @@ def register_referral(referral_code, new_user_id):
         
         referrer_id = referrer[0]
         
-        # Не даём регистрировать самого себя
         if referrer_id == new_user_id:
             return None
         
-        # Проверяем, не зарегистрирован ли уже этот пользователь
         cur.execute(
             'SELECT * FROM referrals WHERE referred_id = %s',
             (new_user_id,)
@@ -352,23 +167,21 @@ def register_referral(referral_code, new_user_id):
         if cur.fetchone():
             return None
         
-        # Регистрируем реферала 1 уровня
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO referrals (referrer_id, referred_id, level, created_at)
             VALUES (%s, %s, 1, %s)
             RETURNING referral_id
-        ''', (referrer_id, new_user_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (referrer_id, new_user_id, now_moscow))
         
         referral_id = cur.fetchone()[0]
         
-        # Обновляем счётчик у пригласившего
         cur.execute('''
             UPDATE users 
             SET level1_count = level1_count + 1 
             WHERE user_id = %s
         ''', (referrer_id,))
         
-        # Записываем, кто пригласил нового пользователя
         cur.execute(
             'UPDATE users SET referred_by = %s WHERE user_id = %s',
             (referrer_id, new_user_id)
@@ -393,7 +206,6 @@ def process_referral_reward(referrer_id, friend_id, order_id):
     
     cur = conn.cursor()
     try:
-        # Проверяем, не начисляли ли уже баллы за этого друга
         cur.execute('''
             SELECT * FROM referrals 
             WHERE referred_id = %s AND rewarded = TRUE
@@ -402,7 +214,6 @@ def process_referral_reward(referrer_id, friend_id, order_id):
         if cur.fetchone():
             return
         
-        # Начисляем баллы за реферала 1 уровня
         cur.execute('''
             UPDATE users 
             SET referral_balance = referral_balance + 100,
@@ -413,27 +224,24 @@ def process_referral_reward(referrer_id, friend_id, order_id):
         
         new_balance = cur.fetchone()[0]
         
-        # Записываем в историю начислений
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
             VALUES (%s, 100, 'level1', %s, %s)
-        ''', (referrer_id, friend_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (referrer_id, friend_id, now_moscow))
         
-        # Отмечаем реферала как награждённого
         cur.execute('''
             UPDATE referrals 
             SET rewarded = TRUE, first_order_id = %s 
             WHERE referred_id = %s
         ''', (order_id, friend_id))
         
-        # Проверяем, не был ли пригласивший сам чьим-то рефералом (level 2)
         cur.execute('SELECT referred_by FROM users WHERE user_id = %s', (referrer_id,))
         level2_referrer = cur.fetchone()
         
         if level2_referrer and level2_referrer[0]:
             level2_id = level2_referrer[0]
             
-            # Начисляем баллы за реферала 2 уровня
             cur.execute('''
                 UPDATE users 
                 SET referral_balance = referral_balance + 30,
@@ -442,17 +250,15 @@ def process_referral_reward(referrer_id, friend_id, order_id):
                 WHERE user_id = %s
             ''', (level2_id,))
             
-            # Записываем в историю
             cur.execute('''
                 INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
                 VALUES (%s, 30, 'level2', %s, %s)
-            ''', (level2_id, friend_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+            ''', (level2_id, friend_id, now_moscow))
             
             print(f"✅ Пользователь {level2_id} получил 30 баллов за реферала 2 уровня")
         
         conn.commit()
         print(f"✅ Пользователь {referrer_id} получил 100 баллов за реферала {friend_id}")
-        print(f"💰 Новый баланс: {new_balance} баллов")
         
     except Exception as e:
         print(f"❌ Ошибка начисления баллов: {e}")
@@ -482,7 +288,6 @@ def get_referral_stats(user_id):
         if not user_stats:
             return None
         
-        # Получаем последних 5 рефералов
         cur.execute('''
             SELECT 
                 u.first_name,
@@ -498,7 +303,6 @@ def get_referral_stats(user_id):
         
         recent = cur.fetchall()
         
-        # Получаем историю начислений
         cur.execute('''
             SELECT amount, source, created_at
             FROM referral_earnings
@@ -533,25 +337,23 @@ def use_balance_for_order(user_id, order_id, amount):
     
     cur = conn.cursor()
     try:
-        # Проверяем баланс
         cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
         balance = cur.fetchone()[0]
         
         if balance < amount:
             return False
         
-        # Списываем баллы
         cur.execute('''
             UPDATE users 
             SET referral_balance = referral_balance - %s 
             WHERE user_id = %s
         ''', (amount, user_id))
         
-        # Записываем трату
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO referral_spendings (user_id, amount, order_id, created_at)
             VALUES (%s, %s, %s, %s)
-        ''', (user_id, amount, order_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (user_id, amount, order_id, now_moscow))
         
         conn.commit()
         return True
@@ -562,8 +364,20 @@ def use_balance_for_order(user_id, order_id, amount):
         cur.close()
         conn.close()
 
-# Получаем строку подключения из переменной окружения
-DATABASE_URL = os.environ.get('DATABASE_URL')
+# =============== ОСНОВНЫЕ ФУНКЦИИ БД ===============
+
+def get_connection():
+    """Возвращает подключение к PostgreSQL"""
+    if not DATABASE_URL:
+        print("❌ DATABASE_URL не найден в переменных окружения!")
+        return None
+    
+    try:
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=10)
+        return conn
+    except Exception as e:
+        print(f"❌ Ошибка подключения к БД: {e}")
+        return None
 
 def save_prices(prices):
     """Сохраняет цены в БД"""
@@ -573,7 +387,6 @@ def save_prices(prices):
     
     cur = conn.cursor()
     try:
-        # Создаём таблицу для цен, если её нет
         cur.execute('''
             CREATE TABLE IF NOT EXISTS prices (
                 id INTEGER PRIMARY KEY DEFAULT 1,
@@ -583,7 +396,6 @@ def save_prices(prices):
             )
         ''')
         
-        # Вставляем или обновляем цены
         cur.execute('''
             INSERT INTO prices (id, price_1, price_2, price_3)
             VALUES (1, %s, %s, %s)
@@ -616,7 +428,7 @@ def load_prices():
             return {
                 '1': result[0],
                 '2': result[1],
-                '3+': result[2]  # ← ПРОВЕРЬ ЭТО ЗНАЧЕНИЕ
+                '3+': result[2]
             }
         else:
             return {'1': 100, '2': 140, '3+': 150}
@@ -626,7 +438,6 @@ def load_prices():
     finally:
         cur.close()
         conn.close()
-
 
 def delete_all_user_messages(user_id):
     """Помечает все сообщения пользователя как удалённые"""
@@ -656,13 +467,11 @@ def check_messages_exists(user_id):
     
     cur = conn.cursor()
     try:
-        # Проверяем все сообщения без условий
         cur.execute("SELECT COUNT(*) FROM messages WHERE user_id = %s", (user_id,))
         count = cur.fetchone()[0]
         print(f"🔍 Всего сообщений для user {user_id}: {count}")
         
         if count > 0:
-            # Покажем первые несколько
             cur.execute("SELECT * FROM messages WHERE user_id = %s LIMIT 3", (user_id,))
             rows = cur.fetchall()
             for row in rows:
@@ -681,14 +490,12 @@ def debug_messages_table():
     
     cur = conn.cursor()
     try:
-        # Получаем список колонок
         cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'messages' ORDER BY ordinal_position")
         columns = cur.fetchall()
         print("📋 СТРУКТУРА ТАБЛИЦЫ messages:")
         for i, col in enumerate(columns):
             print(f"   {i}: {col[0]} ({col[1]})")
         
-        # Проверяем, есть ли данные
         cur.execute("SELECT COUNT(*) FROM messages")
         count = cur.fetchone()[0]
         print(f"📊 Всего записей: {count}")
@@ -704,43 +511,6 @@ def debug_messages_table():
         cur.close()
         conn.close()
 
-def reset_messages_table():
-    """Удаляет и пересоздаёт таблицу messages"""
-    conn = get_connection()
-    if not conn:
-        print("❌ Нет подключения к БД")
-        return
-    
-    cur = conn.cursor()
-    try:
-        # Удаляем существующую таблицу
-        cur.execute('DROP TABLE IF EXISTS messages CASCADE')
-        print("✅ Таблица messages удалена")
-        
-        # Создаём новую с правильной структурой
-        cur.execute('''
-            CREATE TABLE messages (
-                message_id SERIAL PRIMARY KEY,
-                user_id BIGINT,
-                user_message TEXT,
-                admin_reply TEXT,
-                status TEXT DEFAULT 'new',
-                is_important BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP,
-                replied_at TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )
-        ''')
-        print("✅ Таблица messages создана заново")
-        
-        conn.commit()
-    except Exception as e:
-        print(f"❌ Ошибка при сбросе таблицы: {e}")
-        conn.rollback()
-    finally:
-        cur.close()
-        conn.close()
-
 def check_database_integrity():
     """Проверка целостности базы данных"""
     conn = get_connection()
@@ -749,43 +519,12 @@ def check_database_integrity():
     
     cur = conn.cursor()
     try:
-        # Проверяем все текстовые поля на наличие битых символов
         tables = ['users', 'orders', 'messages', 'favorite_addresses']
         for table in tables:
             cur.execute(f"SELECT * FROM {table} LIMIT 1")
             print(f"✅ Таблица {table} доступна")
     except Exception as e:
         print(f"❌ Ошибка при проверке таблицы {table}: {e}")
-    finally:
-        cur.close()
-        conn.close()
-        
-def get_connection():
-    if not DATABASE_URL:
-        print("❌ DATABASE_URL не найден!")
-        return None
-    try:
-        # Добавьте таймаут и обработку ошибок
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=10)
-        return conn
-    except Exception as e:
-        print(f"❌ Ошибка подключения: {e}")
-        return None
-        
-def delete_order(order_id):
-    """Удаление заказа из базы данных"""
-    conn = get_connection()
-    if not conn:
-        return None
-    
-    cur = conn.cursor()
-    try:
-        cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
-        cur.execute('DELETE FROM orders WHERE order_id = %s', (order_id,))
-        conn.commit()
-        print(f"✅ Заказ #{order_id} удалён из базы данных")
-    except Exception as e:
-        print(f"❌ Ошибка удаления заказа {order_id}: {e}")
     finally:
         cur.close()
         conn.close()
@@ -799,7 +538,6 @@ def init_db():
     
     cur = conn.cursor()
     
-    # Таблица пользователей
     cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id BIGINT PRIMARY KEY,
@@ -816,7 +554,6 @@ def init_db():
         )
     ''')
     
-    # Таблица сообщений
     cur.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             message_id SERIAL PRIMARY KEY,
@@ -830,7 +567,6 @@ def init_db():
         )
     ''')
     
-    # Таблица заказов
     cur.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             order_id SERIAL PRIMARY KEY,
@@ -851,11 +587,21 @@ def init_db():
             payment_id TEXT,
             status TEXT DEFAULT 'new',
             created_at TIMESTAMP,
+            courier_id BIGINT,
+            taken_at TIMESTAMP,
+            confirmed_by BIGINT,
+            confirmed_by_type TEXT DEFAULT 'admin',
+            confirmed_at TIMESTAMP,
+            completed_by BIGINT,
+            completed_by_type TEXT,
+            completed_at TIMESTAMP,
+            cancelled_by BIGINT,
+            cancelled_at TIMESTAMP,
+            cancel_reason TEXT,
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
     
-    # Таблица занятых слотов
     cur.execute('''
         CREATE TABLE IF NOT EXISTS busy_slots (
             slot_id SERIAL PRIMARY KEY,
@@ -866,7 +612,6 @@ def init_db():
         )
     ''')
     
-    # Таблица черного списка
     cur.execute('''
         CREATE TABLE IF NOT EXISTS blacklist (
             user_id BIGINT PRIMARY KEY,
@@ -876,7 +621,6 @@ def init_db():
         )
     ''')
     
-    # Таблица рассылок
     cur.execute('''
         CREATE TABLE IF NOT EXISTS broadcasts (
             broadcast_id SERIAL PRIMARY KEY,
@@ -887,7 +631,6 @@ def init_db():
         )
     ''')
     
-    # Таблица избранных адресов
     cur.execute('''
         CREATE TABLE IF NOT EXISTS favorite_addresses (
             address_id SERIAL PRIMARY KEY,
@@ -903,10 +646,19 @@ def init_db():
         )
     ''')
     
-    # Индекс для быстрого поиска по дате и времени
     cur.execute('''
         CREATE INDEX IF NOT EXISTS idx_busy_slots_datetime 
         ON busy_slots (slot_date, slot_time)
+    ''')
+    
+    cur.execute('''
+        CREATE INDEX IF NOT EXISTS idx_orders_courier 
+        ON orders(courier_id) WHERE courier_id IS NOT NULL
+    ''')
+    
+    cur.execute('''
+        CREATE INDEX IF NOT EXISTS idx_orders_active 
+        ON orders(order_date, status) WHERE status IN ('new', 'confirmed')
     ''')
     
     conn.commit()
@@ -914,7 +666,7 @@ def init_db():
     conn.close()
     print("✅ Таблицы PostgreSQL созданы или уже существуют")
 
-# =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ И ВРЕМЕНЕМ ===============
+# =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ ===============
 
 def parse_time_slot(slot_time):
     """Парсит временной слот и возвращает время начала и конца"""
@@ -928,11 +680,9 @@ def is_within_working_hours(slot_time):
     from config import WORK_HOURS
     
     try:
-        # Берём начало слота
         start_time_str = slot_time.split('-')[0]
         start_hour = int(start_time_str.split(':')[0])
         
-        # Проверяем, что час начала в пределах рабочего времени
         return WORK_HOURS['start'] <= start_hour < WORK_HOURS['end']
     except Exception as e:
         print(f"❌ Ошибка проверки рабочего времени: {e}")
@@ -943,11 +693,12 @@ def is_slot_expired(slot_date, slot_time):
     Проверяет, истёк ли слот.
     Слот считается истекшим, если:
     - Это сегодня И текущее время > время начала слота + 1 час 15 минут
-    - ИЛИ это сегодня И текущее время > время окончания слота (подстраховка)
+    - ИЛИ это сегодня И текущее время > время окончания слота
     - ИЛИ это прошедшая дата (вчера и раньше)
     """
     try:
-        now = now = datetime.datetime.now() + datetime.timedelta(hours=3)
+        # Используем московское время
+        now = moscow_now()
         today = now.strftime("%d.%m.%Y")
         
         # Парсим дату слота
@@ -988,7 +739,7 @@ def is_slot_expired(slot_date, slot_time):
         
     except Exception as e:
         print(f"❌ Ошибка при проверке истечения слота: {e}")
-        return True
+        return True  # В случае ошибки считаем слот истёкшим для безопасности
 
 def get_available_slots(date):
     """
@@ -1042,7 +793,7 @@ def get_available_slots(date):
         conn.close()
 
 def is_time_slot_free(date, time_slot):
-    """Проверка, свободен ли временной слот (максимум 3 заказа)"""
+    """Проверка, свободен ли временной слот"""
     # Сначала проверяем рабочие часы
     if not is_within_working_hours(time_slot):
         return False
@@ -1062,7 +813,7 @@ def is_time_slot_free(date, time_slot):
             (date, time_slot)
         )
         count = cur.fetchone()[0]
-        return count < 3
+        return count < 4
     except Exception as e:
         print(f"❌ Ошибка проверки слота: {e}")
         return False
@@ -1132,11 +883,12 @@ def add_user(user_id, username, first_name, last_name):
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO users (user_id, username, first_name, last_name, registered_date)
             VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO NOTHING
-        ''', (user_id, username, first_name, last_name, datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (user_id, username, first_name, last_name, now_moscow))
         conn.commit()
         print(f"✅ Пользователь {user_id} добавлен в БД")
     except Exception as e:
@@ -1313,12 +1065,13 @@ def save_favorite_address(user_id, address_name, street_address, entrance, floor
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO favorite_addresses 
             (user_id, address_name, street_address, entrance, floor, apartment, intercom, created_date)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING address_id
-        ''', (user_id, address_name, street_address, entrance, floor, apartment, intercom, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (user_id, address_name, street_address, entrance, floor, apartment, intercom, now_moscow))
         address_id = cur.fetchone()[0]
         conn.commit()
         print(f"✅ Избранный адрес #{address_id} сохранён для пользователя {user_id}")
@@ -1383,7 +1136,10 @@ def get_order_by_id(order_id):
         cur.execute('''
             SELECT order_id, user_id, client_name, phone, street_address, 
                    entrance, floor, apartment, intercom, order_date, order_time, 
-                   bags_count, price, status, created_at 
+                   bags_count, price, status, courier_id, created_at,
+                   confirmed_by, confirmed_by_type, confirmed_at,
+                   completed_by, completed_by_type, completed_at,
+                   cancelled_by, cancelled_at, cancel_reason
             FROM orders WHERE order_id = %s
         ''', (order_id,))
         order = cur.fetchone()
@@ -1406,7 +1162,7 @@ def get_all_orders():
         cur.execute('''
             SELECT order_id, user_id, client_name, phone, street_address, 
                    entrance, floor, apartment, intercom, order_date, order_time, 
-                   bags_count, price, status, created_at 
+                   bags_count, price, status, courier_id, created_at 
             FROM orders ORDER BY created_at DESC
         ''')
         orders = cur.fetchall()
@@ -1445,6 +1201,7 @@ def create_order(user_id, client_name, phone, street_address, entrance, floor, a
         if count >= 4:
             return False, "На это время уже 4 заказа. Пожалуйста, выберите другое время."
         
+        now_moscow = moscow_now()
         # Создаём заказ
         cur.execute('''
             INSERT INTO orders 
@@ -1453,7 +1210,7 @@ def create_order(user_id, client_name, phone, street_address, entrance, floor, a
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING order_id
         ''', (user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
-              order_date, order_time, bags_count, price, payment_method, 'pending', now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+              order_date, order_time, bags_count, price, payment_method, 'pending', now_moscow))
         
         order_id = cur.fetchone()[0]
         
@@ -1475,18 +1232,25 @@ def create_order(user_id, client_name, phone, street_address, entrance, floor, a
         cur.close()
         conn.close()
 
-def confirm_order(order_id):
-    """Подтверждение заказа - меняет статус на confirmed, слот остаётся занятым"""
+def confirm_order(order_id, confirmed_by=None):
+    """Подтверждение заказа - меняет статус на confirmed"""
     conn = get_connection()
     if not conn:
         return None
     
     cur = conn.cursor()
     try:
-        # Обновляем статус заказа на confirmed
-        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', ('confirmed', order_id))
+        now_moscow = moscow_now()
+        cur.execute('''
+            UPDATE orders 
+            SET status = 'confirmed', 
+                confirmed_at = %s,
+                confirmed_by = %s,
+                confirmed_by_type = 'admin'
+            WHERE order_id = %s AND status = 'new'
+        ''', (now_moscow, confirmed_by, order_id))
         conn.commit()
-        print(f"✅ Заказ #{order_id} подтверждён")
+        print(f"✅ Заказ #{order_id} подтверждён администратором {confirmed_by}")
     except Exception as e:
         print(f"❌ Ошибка подтверждения заказа {order_id}: {e}")
     finally:
@@ -1510,7 +1274,7 @@ def update_order_status(order_id, new_status):
         cur.close()
         conn.close()
 
-def cancel_order(order_id):
+def cancel_order(order_id, cancelled_by=None, reason='admin_cancelled'):
     """Отмена заказа - освобождаем место"""
     conn = get_connection()
     if not conn:
@@ -1518,34 +1282,275 @@ def cancel_order(order_id):
     
     cur = conn.cursor()
     try:
-        # Удаляем слот
         cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
-        # Обновляем статус заказа
-        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', ('cancelled', order_id))
+        now_moscow = moscow_now()
+        cur.execute('''
+            UPDATE orders 
+            SET status = 'cancelled',
+                cancelled_at = %s,
+                cancelled_by = %s,
+                cancel_reason = %s
+            WHERE order_id = %s
+        ''', (now_moscow, cancelled_by, reason, order_id))
         conn.commit()
-        print(f"✅ Заказ #{order_id} отменён")
+        print(f"✅ Заказ #{order_id} отменён администратором {cancelled_by}")
     except Exception as e:
         print(f"❌ Ошибка отмены заказа {order_id}: {e}")
     finally:
         cur.close()
         conn.close()
 
-def complete_order(order_id):
-    """Выполнение заказа - освобождаем место"""
+def complete_order(order_id, completed_by=None, completed_by_type='admin'):
+    """Отметить заказ как выполненный"""
     conn = get_connection()
     if not conn:
         return None
     
     cur = conn.cursor()
     try:
-        # Удаляем слот (освобождаем место)
+        cur.execute('SELECT status, courier_id FROM orders WHERE order_id = %s', (order_id,))
+        order = cur.fetchone()
+        
+        if not order:
+            print(f"❌ Заказ #{order_id} не найден")
+            return False
+        
         cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
-        # Обновляем статус заказа
-        cur.execute('UPDATE orders SET status = %s WHERE order_id = %s', ('completed', order_id))
+        
+        now_moscow = moscow_now()
+        cur.execute('''
+            UPDATE orders 
+            SET status = 'completed', 
+                completed_at = %s,
+                completed_by = %s,
+                completed_by_type = %s
+            WHERE order_id = %s
+        ''', (now_moscow, completed_by, completed_by_type, order_id))
+        
         conn.commit()
-        print(f"✅ Заказ #{order_id} выполнен и слот освобождён")
+        print(f"✅ Заказ #{order_id} выполнен. Кем: {completed_by_type} (ID: {completed_by})")
+        return True
+        
     except Exception as e:
         print(f"❌ Ошибка выполнения заказа {order_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def delete_order(order_id):
+    """Удаление заказа из базы данных"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order_id,))
+        cur.execute('DELETE FROM orders WHERE order_id = %s', (order_id,))
+        conn.commit()
+        print(f"✅ Заказ #{order_id} удалён из базы данных")
+    except Exception as e:
+        print(f"❌ Ошибка удаления заказа {order_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+# =============== ФУНКЦИИ ДЛЯ КУРЬЕРОВ ===============
+
+def get_courier_active_orders():
+    """Получает активные заказы (new и confirmed) на сегодня и завтра"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        now_moscow = moscow_now()
+        today = now_moscow.strftime("%d.%m.%Y")
+        tomorrow = (now_moscow + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
+        
+        cur.execute('''
+            SELECT order_id, user_id, client_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, order_date, order_time, 
+                   bags_count, price, status, courier_id
+            FROM orders
+            WHERE status IN ('new', 'confirmed') 
+              AND order_date IN (%s, %s)
+            ORDER BY order_date, order_time
+        ''', (today, tomorrow))
+        
+        orders = cur.fetchall()
+        return orders
+    except Exception as e:
+        print(f"❌ Ошибка получения активных заказов: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def assign_courier_to_order(order_id, courier_id):
+    """Назначает курьера на заказ и меняет статус на confirmed"""
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT status FROM orders WHERE order_id = %s', (order_id,))
+        status = cur.fetchone()
+        
+        if not status or status[0] != 'new':
+            print(f"❌ Заказ #{order_id} нельзя взять (статус: {status[0] if status else 'unknown'})")
+            return False
+        
+        now_moscow = moscow_now()
+        cur.execute('''
+            UPDATE orders 
+            SET status = 'confirmed', 
+                courier_id = %s, 
+                taken_at = %s,
+                confirmed_by = %s,
+                confirmed_by_type = 'courier',
+                confirmed_at = %s
+            WHERE order_id = %s AND status = 'new'
+        ''', (courier_id, now_moscow, courier_id, now_moscow, order_id))
+        
+        conn.commit()
+        print(f"✅ Курьер {courier_id} назначен на заказ #{order_id}")
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка назначения курьера: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_completed_orders(courier_id, limit=10):
+    """Получает историю выполненных заказов курьера"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT order_id, order_date, order_time, bags_count, price
+            FROM orders
+            WHERE status = 'completed' AND courier_id = %s
+            ORDER BY completed_at DESC
+            LIMIT %s
+        ''', (courier_id, limit))
+        orders = cur.fetchall()
+        return orders
+    except Exception as e:
+        print(f"❌ Ошибка получения истории: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_stats(courier_id):
+    """Общая статистика курьера"""
+    conn = get_connection()
+    if not conn:
+        return {'total': 0, 'bags': 0, 'earned': 0}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
+            FROM orders
+            WHERE status = 'completed' AND courier_id = %s
+        ''', (courier_id,))
+        total, bags, earned = cur.fetchone()
+        return {'total': total or 0, 'bags': bags or 0, 'earned': earned or 0}
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики: {e}")
+        return {'total': 0, 'bags': 0, 'earned': 0}
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_daily_stats(courier_id, date):
+    """Статистика курьера за конкретный день"""
+    conn = get_connection()
+    if not conn:
+        return {'completed': 0, 'bags': 0, 'earned': 0}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
+            FROM orders
+            WHERE status = 'completed' 
+              AND courier_id = %s 
+              AND order_date = %s
+        ''', (courier_id, date))
+        completed, bags, earned = cur.fetchone()
+        return {'completed': completed or 0, 'bags': bags or 0, 'earned': earned or 0}
+    except Exception as e:
+        print(f"❌ Ошибка получения дневной статистики: {e}")
+        return {'completed': 0, 'bags': 0, 'earned': 0}
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_stats_period(courier_id, start_date, end_date):
+    """Статистика за период"""
+    conn = get_connection()
+    if not conn:
+        return {'total': 0, 'bags': 0, 'earned': 0, 'avg': 0}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
+            FROM orders
+            WHERE status = 'completed' 
+              AND courier_id = %s 
+              AND order_date BETWEEN %s AND %s
+        ''', (courier_id, start_date, end_date))
+        total, bags, earned = cur.fetchone()
+        total = total or 0
+        earned = earned or 0
+        avg = earned // total if total > 0 else 0
+        return {'total': total, 'bags': bags or 0, 'earned': earned, 'avg': avg}
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики за период: {e}")
+        return {'total': 0, 'bags': 0, 'earned': 0, 'avg': 0}
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_hourly_stats(courier_id):
+    """Статистика по часам (в какое время чаще берут заказы)"""
+    conn = get_connection()
+    if not conn:
+        return {}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT EXTRACT(HOUR FROM taken_at) as hour, COUNT(*)
+            FROM orders
+            WHERE status = 'completed' 
+              AND courier_id = %s 
+              AND taken_at IS NOT NULL
+            GROUP BY hour
+            ORDER BY hour
+        ''', (courier_id,))
+        
+        hourly = {}
+        for row in cur.fetchall():
+            hour = int(row[0])
+            count = row[1]
+            hourly[hour] = count
+        return hourly
+    except Exception as e:
+        print(f"❌ Ошибка получения почасовой статистики: {e}")
+        return {}
     finally:
         cur.close()
         conn.close()
@@ -1560,11 +1565,12 @@ def save_message(user_id, message_text):
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO messages (user_id, user_message, created_at, status)
             VALUES (%s, %s, %s, 'new')
             RETURNING message_id
-        ''', (user_id, message_text, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (user_id, message_text, now_moscow))
         message_id = cur.fetchone()[0]
         conn.commit()
         print(f"✅ Сообщение #{message_id} сохранено от пользователя {user_id}")
@@ -1608,11 +1614,12 @@ def reply_to_message(message_id, reply_text):
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             UPDATE messages 
             SET admin_reply = %s, status = 'replied', replied_at = %s
             WHERE message_id = %s
-        ''', (reply_text, dnow = datetime.datetime.now() + datetime.timedelta(hours=3), message_id))
+        ''', (reply_text, now_moscow, message_id))
         conn.commit()
         print(f"✅ Ответ на сообщение #{message_id} сохранён")
     except Exception as e:
@@ -1631,12 +1638,13 @@ def add_to_blacklist(user_id, reason=""):
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO blacklist (user_id, reason, added_date, added_by)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE 
             SET reason = EXCLUDED.reason, added_date = EXCLUDED.added_date
-        ''', (user_id, reason, dnow = datetime.datetime.now() + datetime.timedelta(hours=3), 0))
+        ''', (user_id, reason, now_moscow, 0))
         conn.commit()
         print(f"✅ Пользователь {user_id} добавлен в чёрный список")
     except Exception as e:
@@ -1713,11 +1721,12 @@ def save_broadcast(admin_id, message_text):
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO broadcasts (admin_id, message_text, sent_date, recipients_count)
             VALUES (%s, %s, %s, %s)
             RETURNING broadcast_id
-        ''', (admin_id, message_text, now = datetime.datetime.now() + datetime.timedelta(hours=3), 0))
+        ''', (admin_id, message_text, now_moscow, 0))
         broadcast_id = cur.fetchone()[0]
         conn.commit()
         return broadcast_id
@@ -1765,24 +1774,16 @@ def get_all_broadcasts():
         cur.close()
         conn.close()
 
-# Инициализация базы данных при импорте модуля
-if __name__ != '__main__':
-    init_db()
-    print("✅ База данных инициализирована при импорте")
-# =============== НОВЫЕ ФУНКЦИИ ДЛЯ МИНИ-МЕССЕНДЖЕРА ===============
+# =============== ФУНКЦИИ ДЛЯ МИНИ-МЕССЕНДЖЕРА ===============
 
 def get_dialogs(filter_type='all'):
-    """
-    Получает список диалогов с последними сообщениями
-    filter_type: 'all', 'new', 'important', 'outbox'
-    """
+    """Получает список диалогов с последними сообщениями"""
     conn = get_connection()
     if not conn:
         return []
     
     cur = conn.cursor()
     try:
-        # Получаем все диалоги с последним сообщением и количеством непрочитанных
         query = '''
             SELECT DISTINCT ON (m.user_id) 
                 m.user_id,
@@ -1819,18 +1820,12 @@ def get_dialogs(filter_type='all'):
 
 def get_dialog_messages(user_id, limit=20):
     """Получает историю сообщений с пользователем"""
-    print(f"🔍 ВХОД В get_dialog_messages для user {user_id}")
-    
     conn = get_connection()
     if not conn:
-        print("❌ Нет подключения к БД")
         return []
     
     cur = conn.cursor()
     try:
-        print(f"🔍 Выполняем запрос для user {user_id}")
-        
-        # Запрос под вашу структуру таблицы
         cur.execute('''
             SELECT 
                 message_id,
@@ -1848,16 +1843,11 @@ def get_dialog_messages(user_id, limit=20):
         ''', (user_id, limit))
         
         messages = cur.fetchall()
-        print(f"🔍 Найдено сообщений: {len(messages)}")
-        
-        # Преобразуем в удобный формат
         result = []
         for msg in messages:
-            # msg: (message_id, user_id, user_message, admin_reply, status, is_important, created_at, replied_at)
             is_from_admin = msg[2] and msg[2].startswith('[ОТ АДМИНА]') if msg[2] else False
             is_read = (msg[4] == 'replied')
             
-            # Текст сообщения (если от админа, убираем префикс)
             text = msg[2]
             if is_from_admin and text:
                 text = text.replace('[ОТ АДМИНА] ', '', 1)
@@ -1875,15 +1865,10 @@ def get_dialog_messages(user_id, limit=20):
                 'is_read': is_read
             })
         
-        if result:
-            print(f"🔍 Первое сообщение после обработки: {result[0]}")
-        
         return result
         
     except Exception as e:
-        print(f"❌ ОШИБКА в get_dialog_messages: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Ошибка в get_dialog_messages: {e}")
         return []
     finally:
         cur.close()
@@ -1938,7 +1923,7 @@ def delete_message(message_id, permanent=False):
         if permanent:
             cur.execute('DELETE FROM messages WHERE message_id = %s', (message_id,))
         else:
-            cur.execute("UPDATE messages SET status = 'deleted' WHERE message_id = %s", (message_id,))  # ← ИСПРАВЛЕНО
+            cur.execute("UPDATE messages SET status = 'deleted' WHERE message_id = %s", (message_id,))
         conn.commit()
         print(f"✅ Сообщение #{message_id} удалено")
     except Exception as e:
@@ -1955,7 +1940,7 @@ def restore_message(message_id):
     
     cur = conn.cursor()
     try:
-        cur.execute("UPDATE messages SET status = 'new' WHERE message_id = %s", (message_id,))  # ← ИСПРАВЛЕНО
+        cur.execute("UPDATE messages SET status = 'new' WHERE message_id = %s", (message_id,))
         conn.commit()
         print(f"✅ Сообщение #{message_id} восстановлено")
     except Exception as e:
@@ -2002,11 +1987,12 @@ def save_admin_message(user_id, message_text):
     
     cur = conn.cursor()
     try:
+        now_moscow = moscow_now()
         cur.execute('''
             INSERT INTO messages (user_id, user_message, status, created_at)
             VALUES (%s, %s, 'replied', %s)
             RETURNING message_id
-        ''', (user_id, f"[ОТ АДМИНА] {message_text}", now = datetime.datetime.now() + datetime.timedelta(hours=3)))
+        ''', (user_id, f"[ОТ АДМИНА] {message_text}", now_moscow))
         message_id = cur.fetchone()[0]
         conn.commit()
         print(f"✅ Ответ администратора #{message_id} сохранён")
@@ -2019,7 +2005,7 @@ def save_admin_message(user_id, message_text):
         conn.close()
 
 def get_total_unread_messages():
-    """Получает общее количество непрочитанных сообщений (не удалённых)"""
+    """Получает общее количество непрочитанных сообщений"""
     conn = get_connection()
     if not conn:
         return 0
@@ -2037,7 +2023,7 @@ def get_total_unread_messages():
         conn.close()
 
 def get_dialogs_count():
-    """Получает количество диалогов (только с не удалёнными сообщениями)"""
+    """Получает количество диалогов"""
     conn = get_connection()
     if not conn:
         return 0
@@ -2083,3 +2069,8 @@ def search_messages(search_text):
     finally:
         cur.close()
         conn.close()
+
+# Инициализация базы данных при импорте модуля
+if __name__ != '__main__':
+    init_db()
+    print("✅ База данных инициализирована при импорте")
