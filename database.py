@@ -1385,14 +1385,14 @@ def get_total_unread_messages():
         conn.close()
 
 def get_dialogs_count():
-    """Получает количество диалогов"""
+    """Получает количество диалогов (только с не удалёнными сообщениями)"""
     conn = get_connection()
     if not conn:
         return 0
     
     cur = conn.cursor()
     try:
-        cur.execute('SELECT COUNT(DISTINCT user_id) FROM messages')
+        cur.execute("SELECT COUNT(DISTINCT user_id) FROM messages WHERE status != 'deleted'")
         count = cur.fetchone()[0]
         return count
     except Exception as e:
