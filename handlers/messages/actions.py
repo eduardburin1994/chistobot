@@ -91,10 +91,12 @@ async def admin_dialog_delete_confirm(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     await query.answer()
     
-    user_id = int(query.data.replace('dialog_delete_confirm_', ''))
+    # Извлекаем ID пользователя из callback_data
+    data = query.data
+    user_id = int(data.replace('dialog_delete_confirm_', ''))
     
     # Здесь можно реализовать удаление всех сообщений пользователя
-    # Пока просто возвращаемся к списку диалогов
+    # Например: db.delete_all_user_messages(user_id)
     
     await query.edit_message_text(
         "✅ Диалог удален",
