@@ -555,6 +555,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')
         ],
         [
+            InlineKeyboardButton("🚪 Выйти", callback_data='admin_logout'),  # ← НОВАЯ КНОПКА
             InlineKeyboardButton("◀️ Меню", callback_data='back_to_menu')
         ]
     ]
