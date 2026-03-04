@@ -1,4 +1,5 @@
 # handlers/referral/stats.py
+import datetime  # ← ДОБАВЬ ЭТУ СТРОКУ
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import database as db
@@ -57,8 +58,8 @@ async def referral_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"{i}. {name} — {user[2]} баллов\n"
         
     except Exception as e:
-        text = "❌ Ошибка загрузки топа"
-        print(f"Ошибка: {e}")
+        text = f"❌ Ошибка загрузки топа: {e}"
+        print(f"Ошибка в referral_top: {e}")
     finally:
         cur.close()
         conn.close()
