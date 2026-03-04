@@ -638,15 +638,14 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         user_id = query.from_user.id
         print(f"💳 payment_method_handler для пользователя {user_id}")
         
-        # Добавляем импорт БД
-        import database as db  # ← ЭТУ СТРОКУ ДОБАВЬ
+        # Импортируем всё необходимое
+        import database as db
+        from constants import USE_BONUS  # ← ЭТУ СТРОКУ ДОБАВЬ
         
         if user_id not in user_data:
             user_data[user_id] = {}
         
         payment_method = query.data.replace('pay_', '')
-        
-        # ... остальной код ...
         
         if payment_method == 'yookassa':
             await query.edit_message_text(
@@ -663,15 +662,13 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         user_data[user_id]['payment_method'] = payment_method
         
-        # ===== НОВЫЙ ШАГ: ПРОВЕРКА БАЛАНСА =====
-        # Получаем баланс пользователя
+        # ===== ПРОВЕРКА БАЛАНСА =====
         conn = db.get_connection()
         cur = conn.cursor()
         try:
             cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
             balance = cur.fetchone()
             if balance and balance[0] > 0:
-                # Если есть баллы, предлагаем использовать
                 user_data[user_id]['bonus_balance'] = balance[0]
                 
                 keyboard = [
@@ -694,7 +691,7 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         finally:
             cur.close()
             conn.close()
-        # ======================================
+        # ============================
         
         # Если нет баллов, сразу показываем подтверждение
         from handlers.client import confirm_order_before_final
