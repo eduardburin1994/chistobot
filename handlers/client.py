@@ -304,6 +304,12 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение нового адреса с проверкой района и наличия номера дома"""
     user_id = update.effective_user.id
     address = update.message.text
+    
+    # 👇 ДОБАВЬ ЭТИ СТРОКИ ДЛЯ ОТЛАДКИ
+    print(f"🔥🔥🔥 new_address ВЫЗВАНА для пользователя {user_id}")
+    print(f"🔥 Получен адрес: {address}")
+    print(f"🔥 Текущее состояние пользователя в ConversationHandler: {context.user_data.get('_state')}")
+    # 👆
 
     print(f"🏠 [new_address] Вход в функцию. User: {user_id}, Адрес: {address}")
 
