@@ -1053,12 +1053,17 @@ def get_dialogs(filter_type='all'):
 
 def get_dialog_messages(user_id, limit=20):
     """Получает историю сообщений с пользователем"""
+    print(f"🔍 ВХОД В get_dialog_messages для user {user_id}")
+    
     conn = get_connection()
     if not conn:
+        print("❌ Нет подключения к БД")
         return []
     
     cur = conn.cursor()
     try:
+        print(f"🔍 Выполняем запрос для user {user_id}")
+        
         cur.execute('''
             SELECT 
                 message_id,
@@ -1076,17 +1081,20 @@ def get_dialog_messages(user_id, limit=20):
             LIMIT %s
         ''', (user_id, limit))
         
+        print("🔍 Запрос выполнен, получаем данные...")
         messages = cur.fetchall()
         print(f"🔍 get_dialog_messages для user {user_id}: нашел {len(messages)} сообщений")
         
-        # Отладочный вывод первого сообщения
         if messages:
             print(f"🔍 Первое сообщение: {messages[0]}")
             print(f"🔍 Длина кортежа: {len(messages[0])}")
+            print(f"🔍 Типы полей: {[type(x) for x in messages[0]]}")
         
         return messages
     except Exception as e:
-        print(f"❌ Ошибка получения диалога: {e}")
+        print(f"❌ ОШИБКА в get_dialog_messages: {e}")
+        import traceback
+        traceback.print_exc()
         return []
     finally:
         cur.close()
