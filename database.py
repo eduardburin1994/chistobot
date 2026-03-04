@@ -1222,7 +1222,7 @@ def get_total_unread_messages():
     
     cur = conn.cursor()
     try:
-        cur.execute('SELECT COUNT(*) FROM messages WHERE status = 'new'')
+        cur.execute("SELECT COUNT(*) FROM messages WHERE status = 'new'")  # ← ИСПРАВЛЕНО
         count = cur.fetchone()[0]
         return count
     except Exception as e:
