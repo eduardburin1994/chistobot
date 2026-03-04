@@ -1158,33 +1158,56 @@ def get_dialog_messages(user_id, limit=20):
     try:
         print(f"🔍 Выполняем запрос для user {user_id}")
         
+        # Запрос под вашу структуру таблицы
         cur.execute('''
             SELECT 
                 message_id,
                 user_id,
-                CASE 
-                    WHEN user_message LIKE '[ОТ АДМИНА]%' THEN TRUE 
-                    ELSE FALSE 
-                END as from_admin,
                 user_message,
+                admin_reply,
+                status,
+                is_important,
                 created_at,
-                CASE WHEN status = 'replied' THEN TRUE ELSE FALSE END as is_read
+                replied_at
             FROM messages 
             WHERE user_id = %s AND status != 'deleted'
             ORDER BY created_at DESC
             LIMIT %s
         ''', (user_id, limit))
         
-        print("🔍 Запрос выполнен, получаем данные...")
         messages = cur.fetchall()
-        print(f"🔍 get_dialog_messages для user {user_id}: нашел {len(messages)} сообщений")
+        print(f"🔍 Найдено сообщений: {len(messages)}")
         
-        if messages:
-            print(f"🔍 Первое сообщение: {messages[0]}")
-            print(f"🔍 Длина кортежа: {len(messages[0])}")
-            print(f"🔍 Типы полей: {[type(x) for x in messages[0]]}")
+        # Преобразуем в удобный формат
+        result = []
+        for msg in messages:
+            # msg: (message_id, user_id, user_message, admin_reply, status, is_important, created_at, replied_at)
+            is_from_admin = msg[2] and msg[2].startswith('[ОТ АДМИНА]') if msg[2] else False
+            is_read = (msg[4] == 'replied')
+            
+            # Текст сообщения (если от админа, убираем префикс)
+            text = msg[2]
+            if is_from_admin and text:
+                text = text.replace('[ОТ АДМИНА] ', '', 1)
+            
+            result.append({
+                'id': msg[0],
+                'user_id': msg[1],
+                'from_admin': is_from_admin,
+                'text': text,
+                'admin_reply': msg[3],
+                'status': msg[4],
+                'is_important': msg[5],
+                'time': msg[6],
+                'replied_at': msg[7],
+                'is_read': is_read
+            })
         
-        return messages
+        if result:
+            print(f"🔍 Первое сообщение после обработки: {result[0]}")
+        
+        return result
+        
     except Exception as e:
         print(f"❌ ОШИБКА в get_dialog_messages: {e}")
         import traceback
