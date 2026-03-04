@@ -21,6 +21,9 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_info:
         await query.edit_message_text("❌ Пользователь не найден")
         return
+        # ===== ВРЕМЕННАЯ ПРОВЕРКА =====
+    db.check_messages_exists(user_id)  # ← ВСТАВЬ СЮДА
+    # ================================
     
     # Получаем сообщения
     messages = db.get_dialog_messages(user_id, limit=15)
