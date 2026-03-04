@@ -55,7 +55,8 @@ def get_main_keyboard(is_admin=False):
         [
             InlineKeyboardButton("📋 Правила", callback_data='rules'),
             InlineKeyboardButton("📞 Связаться", callback_data='contact')
-        ]
+        ],
+        [InlineKeyboardButton("🎁 Приведи друга", callback_data='referral_info')]  # НОВАЯ КНОПКА
     ]
     
     if is_admin:
