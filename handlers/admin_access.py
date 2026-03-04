@@ -41,15 +41,9 @@ async def admin_login_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
             admin_data['admins'].append(user_id)
             print(f"✅ Новый администратор добавлен: {user_id}")
         
-        await update.message.reply_text(
-            "✅ <b>Доступ разрешён!</b>\n\n"
-            "Добро пожаловать в админ-панель.\n"
-            "Теперь у вас есть доступ ко всем разделам.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("👑 Открыть админку", callback_data='admin')
-            ]])
-        )
+        # Сразу показываем админ-панель
+        from handlers.admin import admin_panel_reply
+        await admin_panel_reply(update, context)
     else:
         await update.message.reply_text(
             "❌ <b>Неверный пароль</b>\n\n"
