@@ -176,13 +176,6 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     elif text in ["курьер", "/курьер"]:
         from handlers.courier_auth import courier_command_start
         await courier_command_start(update, context)
-    else:
-        from keyboards.client_keyboards import get_main_keyboard
-        is_admin = user_id in admin_data['admins']
-        await update.message.reply_text(
-            "Используйте кнопки внизу экрана для навигации 👇",
-            reply_markup=get_main_keyboard(is_admin)
-        )
 
 async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа на приветствие"""
