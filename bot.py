@@ -793,6 +793,22 @@ async def main(set_webhook=True):
     # Добавляем команду отмены
     app.add_handler(CommandHandler('cancel', cancel_command))
     
+    # ============== КОМАНДЫ (русские и английские) ==============
+    # Английские команды
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("rules", rules_command))
+    app.add_handler(CommandHandler("courier", courier_command_start))
+    app.add_handler(CommandHandler("admin", admin_command_start))
+
+    # Русские команды
+    app.add_handler(CommandHandler("старт", start))
+    app.add_handler(CommandHandler("правила", rules_command))
+    app.add_handler(CommandHandler("курьер", courier_command_start))
+    app.add_handler(CommandHandler("админ", admin_command_start))
+
+    # Команда отмены (оставляем как есть)
+    app.add_handler(CommandHandler('cancel', cancel_command))
+
     if set_webhook:
         # Режим polling (для локальной разработки)
         print("🚀 Бот ЧистоBOT запущен в режиме polling...")
