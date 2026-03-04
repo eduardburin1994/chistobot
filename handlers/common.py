@@ -140,24 +140,30 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("⛔ Вы заблокированы в этом боте за нарушение правил.")
         return
     
-    # Проверка на спам
-    is_spam, reason, wait_time = antiflood.is_spam(user_id)
+    # Проверка на спам (НЕ ДЛЯ АДМИНОВ)
+    from config import admin_data
     
-    if is_spam:
-        if reason == "BANNED":
-            await update.message.reply_text(
-                "🚫 Вы автоматически заблокированы за флуд.\n"
-                "Свяжитесь с администратором для разблокировки."
-            )
-        elif reason == "FLOOD":
-            minutes = wait_time // 60
-            await update.message.reply_text(
-                f"⚠️ <b>Слишком много сообщений!</b>\n\n"
-                f"Пожалуйста, подождите {minutes} минут перед отправкой следующего сообщения.\n"
-                f"Это защита от спама.",
-                parse_mode='HTML'
-            )
-        return
+    # Админов не проверяем
+    if user_id not in admin_data['admins']:
+        is_spam, reason, wait_time = antiflood.is_spam(user_id)
+        
+        if is_spam:
+            if reason == "BANNED":
+                await update.message.reply_text(
+                    "🚫 Вы автоматически заблокированы за флуд.\n"
+                    "Свяжитесь с администратором для разблокировки."
+                )
+            elif reason == "FLOOD":
+                minutes = wait_time // 60
+                await update.message.reply_text(
+                    f"⚠️ <b>Слишком много сообщений!</b>\n\n"
+                    f"Пожалуйста, подождите {minutes} минут перед отправкой следующего сообщения.\n"
+                    f"Это защита от спама.",
+                    parse_mode='HTML'
+                )
+            return
+    else:
+        print(f"👑 Админ {user_id} пишет без ограничений")
     
     # Обработка текстовых "команд"
     if text in ["старт", "меню", "начать", "/старт"]:
@@ -171,7 +177,6 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         from handlers.courier_auth import courier_command_start
         await courier_command_start(update, context)
     else:
-        # Если сообщение не похоже на команду - показываем меню
         from keyboards.client_keyboards import get_main_keyboard
         is_admin = user_id in admin_data['admins']
         await update.message.reply_text(

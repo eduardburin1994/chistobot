@@ -75,31 +75,38 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         message = update.message
     
-    # ===== ЗАЩИТА ОТ СПАМА =====
+    # ===== ЗАЩИТА ОТ СПАМА (НЕ ДЛЯ АДМИНОВ) =====
     from utils.antiflood import rate_limiter
+    from config import admin_data
     
-    can_order, wait_time = rate_limiter.can_do_action(user_id, 'order')
-    
-    if not can_order:
-        minutes = wait_time // 60
-        warning_text = (
-            f"⏳ <b>Слишком частые заказы</b>\n\n"
-            f"Вы можете оформить новый заказ через {minutes} минут.\n"
-            f"Это защита от спама."
-        )
+    # Проверяем, админ ли пользователь
+    if user_id not in admin_data['admins']:
+        can_order, wait_time = rate_limiter.can_do_action(user_id, 'order')
         
-        if update.callback_query:
-            await update.callback_query.edit_message_text(
-                warning_text,
-                parse_mode='HTML'
+        if not can_order:
+            minutes = wait_time // 60
+            warning_text = (
+                f"⏳ <b>Слишком частые заказы</b>\n\n"
+                f"Вы можете оформить новый заказ через {minutes} минут.\n"
+                f"Это защита от спама."
             )
-        else:
-            await update.message.reply_text(
-                warning_text,
-                parse_mode='HTML'
-            )
-        return ConversationHandler.END
+            
+            if update.callback_query:
+                await update.callback_query.edit_message_text(
+                    warning_text,
+                    parse_mode='HTML'
+                )
+            else:
+                await update.message.reply_text(
+                    warning_text,
+                    parse_mode='HTML'
+                )
+            return ConversationHandler.END
+    else:
+        print(f"👑 Админ {user_id} оформляет заказ без ограничений")
     # ===========================
+    
+    # ... остальной код функции (ничего не меняем) ...
     
     # ... остальной код функции (ничего не меняем) ...
     """Начало процесса заказа - выбор адреса (из избранного или новый)"""

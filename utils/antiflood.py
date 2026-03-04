@@ -4,18 +4,18 @@ from datetime import datetime, timedelta
 import database as db
 
 class AntiFlood:
-    """Защита от спама"""
+    """Защита от спама - мягкий режим"""
     
     def __init__(self):
         # Храним историю сообщений пользователей
         self.user_messages = defaultdict(list)
         self.warnings = defaultdict(int)
         
-        # Настройки
-        self.MESSAGE_LIMIT = 5  # макс сообщений за период
-        self.TIME_WINDOW = 60   # период в секундах (1 минута)
-        self.COOLDOWN = 1800    # время блокировки (30 минут)
-        self.MAX_WARNINGS = 3    # предупреждений до бана
+        # Настройки (мягкий режим)
+        self.MESSAGE_LIMIT = 10    # макс сообщений за период
+        self.TIME_WINDOW = 60      # период в секундах (1 минута)
+        self.COOLDOWN = 300        # время блокировки (5 минут)
+        self.MAX_WARNINGS = 5      # предупреждений до бана
     
     def is_spam(self, user_id):
         """
@@ -64,9 +64,9 @@ class AntiFlood:
         return 0
 
 class RateLimiter:
-    """Ограничитель частоты действий"""
+    """Ограничитель частоты действий с исключением для админов"""
     
-    def __init__(self, limit=1, period=1800):  # 1 действие в 30 минут
+    def __init__(self, limit=2, period=1800):  # 2 действия в 30 минут
         self.limit = limit
         self.period = period
         self.user_actions = defaultdict(list)
@@ -75,7 +75,16 @@ class RateLimiter:
         """
         Проверяет, может ли пользователь выполнить действие
         action_type: 'order', 'message', 'referral' и т.д.
+        
+        Для админов (user_id в admin_data['admins']) всегда возвращает True
         """
+        # Импортируем admin_data здесь, чтобы избежать циклического импорта
+        from config import admin_data
+        
+        # Админам всё разрешено
+        if user_id in admin_data['admins']:
+            return True, 0
+        
         key = f"{user_id}:{action_type}"
         now = datetime.now()
         
@@ -97,4 +106,4 @@ class RateLimiter:
 
 # Создаём глобальные экземпляры
 antiflood = AntiFlood()
-rate_limiter = RateLimiter(limit=1, period=1800)  # 1 действие в 30 минут
+rate_limiter = RateLimiter(limit=2, period=1800)  # 2 заказа в 30 минут
