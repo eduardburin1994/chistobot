@@ -52,15 +52,36 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Добавляем сообщения (последние 10)
     for msg in messages[:10]:
-        # msg: (message_id, user_id, from_admin, user_message, created_at, is_read)
-        msg_id = msg[0]
-        from_admin = msg[2]  # индекс 2, а не 1!
-        msg_text = msg[3]
-        msg_time = msg[4]
-        is_read = msg[5]
+        # Выводим отладку
+        print(f"🔍 Сообщение: {msg}, длина: {len(msg)}")
+        
+        # Определяем индексы в зависимости от длины кортежа
+        if len(msg) == 6:
+            # Формат: (message_id, user_id, from_admin, user_message, created_at, is_read)
+            msg_id = msg[0]
+            from_admin = msg[2]
+            msg_text = msg[3]
+            msg_time = msg[4]
+            is_read = msg[5]
+        elif len(msg) == 5:
+            # Другой возможный формат
+            msg_id = msg[0]
+            from_admin = msg[2] if len(msg) > 2 else False
+            msg_text = msg[3] if len(msg) > 3 else ""
+            msg_time = msg[4] if len(msg) > 4 else None
+            is_read = False
+        else:
+            # Если формат совсем другой, пропускаем
+            continue
         
         # Форматируем время
-        time_str = msg_time.strftime("%H:%M") if msg_time else ""
+        if msg_time:
+            try:
+                time_str = msg_time.strftime("%H:%M")
+            except:
+                time_str = str(msg_time)
+        else:
+            time_str = ""
         
         if from_admin:
             sender = "👤 Админ"
