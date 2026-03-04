@@ -1082,7 +1082,7 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         from keyboards.client_keyboards import get_main_keyboard
         is_admin = user_id in admin_data['admins']
         
-        await query.edit_message_text(
+     await query.edit_message_text(
             f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
             f"👤 {name}\n"
             f"📞 {phone}\n"
@@ -1094,9 +1094,13 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"🚶‍♂️ <b>Что дальше?</b>\n"
             f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
             f"Подтверждение заказа придёт отдельно.",
-            parse_mode='HTML',
-            reply_markup=get_main_keyboard(is_admin)
+            parse_mode='HTML'
         )
+        
+        # Спрашиваем про избранное
+        from handlers.client import ask_add_to_favorites
+        await ask_add_to_favorites(update, context)
+        return ASK_FAVORITE
         
         # Уведомление админам
         for admin_id in admin_data['admins']:
@@ -1169,6 +1173,97 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         traceback.print_exc()
         return ConversationHandler.END
 
+async def ask_add_to_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Спрашивает пользователя, хочет ли он добавить адрес в избранное"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    # Проверяем, есть ли данные пользователя
+    if user_id not in user_data:
+        await query.edit_message_text(
+            "❌ Произошла ошибка. Начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    # Получаем данные адреса из user_data
+    street_address = user_data[user_id].get('street_address', '')
+    entrance = user_data[user_id].get('entrance', '')
+    floor = user_data[user_id].get('floor', '')
+    apartment = user_data[user_id].get('apartment', '')
+    intercom = user_data[user_id].get('intercom', '')
+    
+    if not street_address:
+        # Если нет адреса, просто возвращаемся в меню
+        from keyboards.client_keyboards import get_main_keyboard
+        from config import admin_data
+        is_admin = user_id in admin_data['admins']
+        keyboard = get_main_keyboard(is_admin)
+        
+        await query.edit_message_text(
+            "👋 Главное меню:",
+            reply_markup=keyboard
+        )
+        return ConversationHandler.END
+    
+    # Формируем красивый адрес
+    full_address = street_address
+    details = []
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apartment and apartment not in ['0', '-']:
+        details.append(f"кв. {apartment}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    # Проверяем, есть ли уже этот адрес в избранном
+    import database as db
+    favorites = db.get_user_favorite_addresses(user_id)
+    address_exists = False
+    
+    for fav in favorites:
+        if (fav[2] == street_address and
+            fav[3] == entrance and
+            fav[4] == floor and
+            fav[5] == apartment and
+            fav[6] == intercom):
+            address_exists = True
+            break
+    
+    if address_exists:
+        # Если адрес уже есть в избранном, просто показываем меню
+        text = f"✅ <b>Заказ оформлен!</b>\n\n📍 {full_address}\n\nАдрес уже есть в избранном."
+        keyboard = [[InlineKeyboardButton("◀️ В главное меню", callback_data='back_to_menu')]]
+    else:
+        # Спрашиваем, добавить ли в избранное
+        text = (
+            f"✅ <b>Заказ оформлен!</b>\n\n"
+            f"📍 <b>Ваш адрес:</b>\n{full_address}\n\n"
+            f"⭐ Хотите добавить этот адрес в избранное?\n"
+            f"В следующий раз не нужно будет вводить его заново!"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Да, добавить", callback_data='favorite_add_after_order'),
+                InlineKeyboardButton("❌ Нет", callback_data='back_to_menu')
+            ]
+        ]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return ASK_FAVORITE
+
 async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
     """Переход к оплате после выбора количества мешков"""
     user_id = update.effective_user.id
@@ -1187,37 +1282,37 @@ async def favorite_add_after_order(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     
     user_id = query.from_user.id
-    import database as db
     
-    # Получаем данные пользователя из базы данных
-    user_info = db.get_user_by_id(user_id)
-    
-    # Проверяем, есть ли у пользователя сохранённый адрес в базе
-    if not user_info or not user_info[5]:
+    # Проверяем, есть ли данные в user_data
+    if user_id not in user_data:
         await query.edit_message_text(
-            "❌ Не удалось найти адрес для сохранения.",
+            "❌ Данные не найдены",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
             ]])
         )
-        return
+        return ConversationHandler.END
     
-    # Проверяем, не добавлен ли уже этот адрес в избранное
+    # Получаем данные адреса из user_data
+    street_address = user_data[user_id].get('street_address', '')
+    entrance = user_data[user_id].get('entrance', '')
+    floor = user_data[user_id].get('floor', '')
+    apartment = user_data[user_id].get('apartment', '')
+    intercom = user_data[user_id].get('intercom', '')
+    
+    if not street_address:
+        await query.edit_message_text(
+            "❌ Адрес не найден",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    import database as db
+    
+    # Получаем список избранного для определения названия
     favorites = db.get_user_favorite_addresses(user_id)
-    for fav in favorites:
-        if (fav[2] == user_info[5] and
-            fav[3] == user_info[6] and
-            fav[4] == user_info[7] and
-            fav[5] == user_info[8] and
-            fav[6] == user_info[9]):
-            await query.edit_message_text(
-                "❌ Этот адрес уже есть в избранном!",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu'),
-                    InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-                ]])
-            )
-            return
     
     # Создаем название по умолчанию
     default_name = f"Адрес {len(favorites) + 1}"
@@ -1226,36 +1321,45 @@ async def favorite_add_after_order(update: Update, context: ContextTypes.DEFAULT
     db.save_favorite_address(
         user_id,
         default_name,
-        user_info[5],
-        user_info[6] or '',
-        user_info[7] or '',
-        user_info[8] or '',
-        user_info[9] or ''
+        street_address,
+        entrance,
+        floor,
+        apartment,
+        intercom
     )
     
     # Формируем красивый адрес для подтверждения
-    full_address = user_info[5]
+    full_address = street_address
     details = []
-    if user_info[6]:
-        details.append(f"под. {user_info[6]}")
-    if user_info[7]:
-        details.append(f"эт. {user_info[7]}")
-    if user_info[8]:
-        details.append(f"кв. {user_info[8]}")
-    if user_info[9]:
-        details.append(f"домофон {user_info[9]}")
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apartment and apartment not in ['0', '-']:
+        details.append(f"кв. {apartment}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
     if details:
         full_address += f" ({', '.join(details)})"
     
+    from keyboards.client_keyboards import get_main_keyboard
+    from config import admin_data
+    is_admin = user_id in admin_data['admins']
+    
     await query.edit_message_text(
-        f"✅ Адрес добавлен в избранное!\n\n"
-        f"📍 {full_address}\n\n"
+        f"✅ <b>Адрес добавлен в избранное!</b>\n\n"
+        f"📍 {full_address}\n"
+        f"🏷 Название: {default_name}\n\n"
         f"Вы можете изменить название в разделе 'Мои адреса'.",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu'),
-            InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-        ]])
+        parse_mode='HTML',
+        reply_markup=get_main_keyboard(is_admin)
     )
+    
+    # Очищаем данные пользователя
+    if user_id in user_data:
+        del user_data[user_id]
+    
+    return ConversationHandler.END
 
 async def favorite_delete_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню удаления избранных адресов"""
