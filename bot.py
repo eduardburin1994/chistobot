@@ -461,6 +461,7 @@ async def main(set_webhook=True):
     # Явная инициализация базы данных
     import database as db
     db.init_db()
+    db.init_referral_tables()  # ← ДОБАВЬ ЭТУ СТРОКУ
     # db.reset_messages_table()  # ← ЗАКОММЕНТИРОВАНО
     db.debug_messages_table()
     db.check_database_integrity()
