@@ -1745,7 +1745,7 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # КНОПКИ ДЛЯ КЛИЕНТА
         keyboard = []
 
-        # Кнопка "Написать сообщение" (ведёт на ввод ID)
+        # Кнопка "Написать сообщение"
         keyboard.append([InlineKeyboardButton("💬 Написать сообщение", callback_data=f'write_to_user_{user_id}')])
 
         # Кнопка "Заблокировать/Разблокировать"
@@ -1753,22 +1753,21 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton("🔓 Разблокировать", callback_data=f'unblock_user_{user_id}')])
         else:
             keyboard.append([InlineKeyboardButton("🔒 Заблокировать", callback_data=f'block_user_{user_id}')])
-            
-            keyboard.append([InlineKeyboardButton("🗑️ ПОЛНОСТЬЮ УДАЛИТЬ", callback_data=f'delete_user_{user_id}')])
         
-        # Новая кнопка "Написать по ID"
+        # 👇 ЭТА КНОПКА ДОЛЖНА БЫТЬ ЗДЕСЬ (ПОСЛЕ if-else, НО ВНУТРИ keyboard) 👇
+        keyboard.append([InlineKeyboardButton("🗑️ ПОЛНОСТЬЮ УДАЛИТЬ", callback_data=f'delete_user_{user_id}')])
+        
+        # Кнопка "Написать по ID" (если нужна)
         keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
 
         # Отправляем сообщение для этого клиента
         if i == 0:
-            # Первое сообщение заменяет исходное
             await query.message.reply_text(
                 text,
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         else:
-            # Остальные отправляем новыми сообщениями
             await query.message.reply_text(
                 text,
                 parse_mode='HTML',

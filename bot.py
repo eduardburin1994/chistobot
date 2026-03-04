@@ -762,8 +762,6 @@ async def main(set_webhook=True):
     app.add_handler(admin_login_handler)
     app.add_handler(dialog_reply_handler)
     app.add_handler(messages_search_handler)
-    
-    # Обработчики удаления клиентов
     app.add_handler(CallbackQueryHandler(admin_delete_user, pattern='^delete_user_'))
     app.add_handler(CallbackQueryHandler(admin_confirm_delete_user, pattern='^confirm_delete_user_'))
     

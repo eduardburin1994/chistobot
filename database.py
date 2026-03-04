@@ -2187,3 +2187,45 @@ def delete_user_completely(user_id):
     finally:
         cur.close()
         conn.close()
+
+        def delete_user_completely(user_id):
+    """
+    Полностью удаляет пользователя из базы данных
+    """
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        # Удаляем избранные адреса
+        cur.execute('DELETE FROM favorite_addresses WHERE user_id = %s', (user_id,))
+        
+        # Удаляем сообщения
+        cur.execute('DELETE FROM messages WHERE user_id = %s', (user_id,))
+        
+        # Удаляем слоты заказов
+        cur.execute('''
+            DELETE FROM busy_slots 
+            WHERE order_id IN (SELECT order_id FROM orders WHERE user_id = %s)
+        ''', (user_id,))
+        
+        # Удаляем заказы
+        cur.execute('DELETE FROM orders WHERE user_id = %s', (user_id,))
+        
+        # Удаляем реферальные связи
+        cur.execute('DELETE FROM referrals WHERE referrer_id = %s OR referred_id = %s', (user_id, user_id))
+        
+        # Удаляем самого пользователя
+        cur.execute('DELETE FROM users WHERE user_id = %s', (user_id,))
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Ошибка при удалении пользователя {user_id}: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
