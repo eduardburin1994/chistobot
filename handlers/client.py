@@ -636,7 +636,7 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer()
         
         user_id = query.from_user.id
-        print(f"💳 payment_method_handler для пользователя {user_id}"
+        print(f"💳 payment_method_handler для пользователя {user_id}")
         
         if user_id not in user_data:
             user_data[user_id] = {}
