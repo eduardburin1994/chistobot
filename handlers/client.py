@@ -632,16 +632,21 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка выбора способа оплаты"""
     try:
-        query = update.callback_query  # ← ИСПРАВЛЕНО
+        query = update.callback_query
         await query.answer()
         
         user_id = query.from_user.id
         print(f"💳 payment_method_handler для пользователя {user_id}")
         
+        # Добавляем импорт БД
+        import database as db  # ← ЭТУ СТРОКУ ДОБАВЬ
+        
         if user_id not in user_data:
             user_data[user_id] = {}
         
         payment_method = query.data.replace('pay_', '')
+        
+        # ... остальной код ...
         
         if payment_method == 'yookassa':
             await query.edit_message_text(
