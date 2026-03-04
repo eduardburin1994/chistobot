@@ -541,6 +541,27 @@ async def main(set_webhook=True):
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
+    # ====== 👇 ВОТ СЮДА ВСТАВЛЯЕМ НОВЫЕ ОБРАБОТЧИКИ ======
+    
+    # ConversationHandler для ответов в диалогах (НОВЫЙ)
+    dialog_reply_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_dialog_reply, pattern='^dialog_reply_')],
+        states={
+            DIALOG_REPLY: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_dialog_send_reply)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ConversationHandler для поиска сообщений (НОВЫЙ)
+    messages_search_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_messages_search, pattern='^admin_messages_search$')],
+        states={
+            SEARCH_MESSAGES: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_messages_search_results)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ====== 👆 ВСТАВИЛИ, ЕДЕМ ДАЛЬШЕ ======
     
     # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
     app.add_handler(CommandHandler("start", start))
@@ -556,6 +577,8 @@ async def main(set_webhook=True):
     app.add_handler(support_handler)
     app.add_handler(price_edit_handler)
     app.add_handler(working_hours_handler)
+    app.add_handler(dialog_reply_handler)  # ← НОВЫЙ (добавь эту строку)
+    app.add_handler(messages_search_handler)  # ← НОВЫЙ (добавь эту строку)
     app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
