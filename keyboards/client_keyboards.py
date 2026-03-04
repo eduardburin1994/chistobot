@@ -45,22 +45,22 @@ def get_main_keyboard(is_admin=False):
     """Главное меню (компактная версия)"""
     keyboard = [
         [
-            InlineKeyboardButton("📦 Заказать вынос", callback_data='new_order'),
-            InlineKeyboardButton("📋 Мои заказы", callback_data='my_orders_detail')
+            InlineKeyboardButton("📦 ЗАКАЗАТЬ", callback_data='new_order'),  # короче
+            InlineKeyboardButton("📋 ЗАКАЗЫ", callback_data='my_orders_detail')
         ],
         [
-            InlineKeyboardButton("⭐ Избранное", callback_data='favorite_menu'),
-            InlineKeyboardButton("💰 Цены", callback_data='prices')
+            InlineKeyboardButton("⭐ ИЗБРАННОЕ", callback_data='favorite_menu'),
+            InlineKeyboardButton("💰 ЦЕНЫ", callback_data='prices')
         ],
         [
-            InlineKeyboardButton("📋 Правила", callback_data='rules'),
-            InlineKeyboardButton("📞 Связаться", callback_data='contact')
+            InlineKeyboardButton("📋 ПРАВИЛА", callback_data='rules'),
+            InlineKeyboardButton("📞 СВЯЗЬ", callback_data='contact')
         ],
-        [InlineKeyboardButton("🎁 Приведи друга", callback_data='referral_info')]  # НОВАЯ КНОПКА
+        [InlineKeyboardButton("🎁 ПРИВЕСТИ ДРУГА", callback_data='referral_info')]
     ]
     
     if is_admin:
-        keyboard.append([InlineKeyboardButton("⚙️ Админка", callback_data='admin')])
+        keyboard.append([InlineKeyboardButton("⚙️ АДМИНКА", callback_data='admin')])
     
     return InlineKeyboardMarkup(keyboard)
 

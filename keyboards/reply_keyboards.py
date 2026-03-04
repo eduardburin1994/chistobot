@@ -4,32 +4,33 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 def get_main_reply_keyboard(is_admin=False):
     """
     Главная reply-клавиатура (появляется только в главном меню)
+    Оптимизировано для мобильных устройств
     """
     
-    # Основные кнопки для всех пользователей
+    # Основные кнопки для всех пользователей (короткие названия)
     keyboard = [
         [
-            KeyboardButton("📦 Заказать вынос"),
-            KeyboardButton("💰 Цены")
+            KeyboardButton("📦 ЗАКАЗАТЬ"),  # вместо "Заказать вынос"
+            KeyboardButton("💰 ЦЕНЫ")
         ],
         [
-            KeyboardButton("📋 Мои заказы"),
-            KeyboardButton("⭐ Избранное")
+            KeyboardButton("📋 ЗАКАЗЫ"),    # вместо "Мои заказы"
+            KeyboardButton("⭐ ИЗБРАННОЕ")
         ],
         [
-            KeyboardButton("📞 Связаться с нами"),
-            KeyboardButton("📋 Правила")
+            KeyboardButton("📞 СВЯЗЬ"),      # вместо "Связаться с нами"
+            KeyboardButton("📋 ПРАВИЛА")
         ]
     ]
     
     # Кнопка для админа
     if is_admin:
-        keyboard.append([KeyboardButton("👑 Админ-панель")])
+        keyboard.append([KeyboardButton("👑 АДМИНКА")])  # вместо "Админ-панель"
     
     return ReplyKeyboardMarkup(
         keyboard,
         resize_keyboard=True,
-        input_field_placeholder="👇 Нажмите кнопку или напишите сообщение...",
+        input_field_placeholder="👇 Меню...",
         one_time_keyboard=False
     )
 
