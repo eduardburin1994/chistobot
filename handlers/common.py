@@ -16,6 +16,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Полноценный обработчик команды /start"""
     user = update.effective_user
     
+    # Проверяем, есть ли реферальный код
+    args = context.args
+    if args and args[0].startswith('ref_'):
+        referral_code = args[0].replace('ref_', '')
+        # Регистрируем реферала
+        referrer_id = db.register_referral(referral_code, user.id)
+        if referrer_id:
+            await update.message.reply_text(
+                "🎉 Вы пришли по приглашению друга!\n"
+                "После первого заказа ваш друг получит 100 баллов."
+            )
+    
     # Проверяем, есть ли пользователь в базе
     user_info = db.get_user_by_id(user.id)
     
