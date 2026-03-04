@@ -8,6 +8,68 @@ from urllib.parse import urlparse
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+def save_prices(prices):
+    """Сохраняет цены в БД"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Создаём таблицу для цен, если её нет
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS prices (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                price_1 INTEGER,
+                price_2 INTEGER,
+                price_3 TEXT
+            )
+        ''')
+        
+        # Вставляем или обновляем цены
+        cur.execute('''
+            INSERT INTO prices (id, price_1, price_2, price_3)
+            VALUES (1, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE 
+            SET price_1 = EXCLUDED.price_1,
+                price_2 = EXCLUDED.price_2,
+                price_3 = EXCLUDED.price_3
+        ''', (prices['1'], prices['2'], prices['3+']))
+        
+        conn.commit()
+        print("✅ Цены сохранены в БД")
+    except Exception as e:
+        print(f"❌ Ошибка сохранения цен: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def load_prices():
+    """Загружает цены из БД"""
+    conn = get_connection()
+    if not conn:
+        return {'1': 100, '2': 140, '3+': 150}  # значения по умолчанию
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT price_1, price_2, price_3 FROM prices WHERE id = 1')
+        result = cur.fetchone()
+        
+        if result:
+            return {
+                '1': result[0],
+                '2': result[1],
+                '3+': result[2]
+            }
+        else:
+            return {'1': 100, '2': 140, '3+': 150}
+    except Exception as e:
+        print(f"❌ Ошибка загрузки цен: {e}")
+        return {'1': 100, '2': 140, '3+': 150}
+    finally:
+        cur.close()
+        conn.close()
+
 
 def delete_all_user_messages(user_id):
     """Помечает все сообщения пользователя как удалённые"""
