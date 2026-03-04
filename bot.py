@@ -2,6 +2,15 @@
 import logging
 import asyncio
 import warnings
+# Импорты для мини-мессенджера
+from handlers.messages.dialogs import admin_dialogs_list
+from handlers.messages.dialog import admin_dialog_open, admin_dialog_mark_read
+from handlers.messages.actions import (
+    admin_dialog_reply, admin_dialog_send_reply,
+    admin_dialog_delete, admin_dialog_delete_confirm,
+    admin_show_phone
+)
+from handlers.messages.search import admin_messages_search, admin_messages_search_results
 from handlers.client import bags_callback
 from keyboards.client_keyboards import get_bags_keyboard
 from handlers.admin import admin_order_detail, reopen_order
@@ -324,6 +333,58 @@ async def button_handler(update: Update, context):
     
     if query.data == 'toggle_test_mode':
         await toggle_test_mode(update, context)
+        return ConversationHandler.END
+        # ============= МИНИ-МЕССЕНДЖЕР =============
+    # Список диалогов
+    if query.data.startswith('admin_dialogs_'):
+        await admin_dialogs_list(update, context)
+        return ConversationHandler.END
+    
+    # Открыть диалог
+    if query.data.startswith('dialog_open_'):
+        await admin_dialog_open(update, context)
+        return DIALOG_VIEW
+    
+    # Ответить в диалоге
+    if query.data.startswith('dialog_reply_'):
+        await admin_dialog_reply(update, context)
+        return DIALOG_REPLY
+    
+    # Отметить диалог как прочитанный
+    if query.data.startswith('dialog_mark_read_'):
+        await admin_dialog_mark_read(update, context)
+        return DIALOG_VIEW
+    
+    # Удалить диалог
+    if query.data.startswith('dialog_delete_'):
+        await admin_dialog_delete(update, context)
+        return DIALOG_VIEW
+    
+    # Подтверждение удаления
+    if query.data.startswith('dialog_delete_confirm_'):
+        await admin_dialog_delete_confirm(update, context)
+        return DIALOG_VIEW
+    
+    # Показать телефон
+    if query.data.startswith('show_phone_'):
+        await admin_show_phone(update, context)
+        return DIALOG_VIEW
+    
+    # Поиск сообщений
+    if query.data == 'admin_messages_search':
+        await admin_messages_search(update, context)
+        return SEARCH_MESSAGES
+    
+    # Корзина сообщений
+    if query.data == 'admin_messages_trash':
+        # Пока заглушка, потом реализуем
+        await query.edit_message_text(
+            "🗑 <b>Корзина</b>\n\nФункция в разработке",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='admin_messages')
+            ]])
+        )
         return ConversationHandler.END
     
     # Обработка действий с заказами
