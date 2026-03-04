@@ -91,15 +91,17 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_info = db.get_user_by_id(user_id)
     
+    # Проверяем, есть ли телефон и адрес
     if user_info and user_info[4]:  # если есть телефон
         user_data[user_id]['name'] = user_info[2] or user.first_name
         user_data[user_id]['phone'] = user_info[4]
         user_data[user_id]['has_saved_data'] = True
         
-        # При вызове choose_address клавиатура уже будет скрыта
+        # Если есть сохранённый адрес, сразу показываем выбор адреса
+        # (там будет предложен этот адрес в списке избранного)
         return await choose_address(update, context)
     else:
-        # Сразу отправляем сообщение с запросом имени, и клавиатура уже будет скрыта
+        # Если нет телефона - запрашиваем имя
         await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
         
