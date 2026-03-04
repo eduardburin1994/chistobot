@@ -942,34 +942,35 @@ def is_slot_expired(slot_date, slot_time):
     """
     Проверяет, истёк ли слот.
     Слот считается истекшим, если:
-    - Текущее время > время начала слота + 1 час 15 минут (для слотов, которые ещё идут)
-    - ИЛИ текущее время > время окончания слота (для слотов, которые уже завершились)
+    - Это сегодня И (текущее время > время начала слота + 1 час 15 минут)
+    - ИЛИ это сегодня И текущее время > время окончания слота
     """
     try:
         now = datetime.datetime.now()
+        today = now.strftime("%d.%m.%Y")
         
-        # Парсим дату слота
-        day, month, year = map(int, slot_date.split('.'))
-        slot_datetime = datetime.datetime(year, month, day)
+        # Если слот не на сегодня - он доступен
+        if slot_date != today:
+            return False
         
         # Парсим время начала и окончания слота
         start_time_str, end_time_str = slot_time.split('-')
         start_hour, start_minute = map(int, start_time_str.split(':'))
         end_hour, end_minute = map(int, end_time_str.split(':'))
         
-        # Устанавливаем время начала и окончания слота
-        slot_start = slot_datetime.replace(hour=start_hour, minute=start_minute, second=0)
-        slot_end = slot_datetime.replace(hour=end_hour, minute=end_minute, second=0)
+        # Создаём объекты времени для сегодня
+        slot_start = now.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
+        slot_end = now.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
         
-        # Если слот уже закончился (текущее время > время окончания)
+        # Если текущее время больше времени окончания слота
         if now > slot_end:
             print(f"⏰ Слот {slot_time} закончился в {slot_end.strftime('%H:%M')}")
             return True
         
-        # Если слот ещё идёт, но прошло больше 1 часа 15 минут с начала
+        # Если прошло больше 1 часа 15 минут с начала слота
         expiry_time = slot_start + datetime.timedelta(hours=1, minutes=15)
         if now > expiry_time:
-            print(f"⏰ Слот {slot_time} истёк по таймауту (прошло >1ч15м с начала)")
+            print(f"⏰ Слот {slot_time} истёк в {expiry_time.strftime('%H:%M')} (прошло >1ч15м с начала)")
             return True
         
         # Слот доступен
