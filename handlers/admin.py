@@ -391,7 +391,7 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📨 Сделать рассылку", callback_data='broadcast_new')],
         [InlineKeyboardButton("📋 История рассылок", callback_data='broadcast_history')],
-        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
+        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]  # ← Кнопка назад
     ]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -401,26 +401,38 @@ async def broadcast_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    # Кнопка отмены
+    cancel_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("❌ Отмена", callback_data='admin_broadcast')
+    ]])
+    
     await query.edit_message_text(
-        "📝 Введите текст сообщения для рассылки всем клиентам:"
+        "📝 Введите текст сообщения для рассылки всем клиентам:",
+        reply_markup=cancel_keyboard
     )
     return BROADCAST_MESSAGE
 
 async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка рассылки"""
     admin_id = update.effective_user.id
+    
+    if admin_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
     message_text = update.message.text
+    
+    # Кнопка отмены во время отправки
+    await update.message.reply_text(
+        "📨 Рассылка началась... это может занять некоторое время.\n"
+        "Вы получите отчёт о результате."
+    )
     
     # Получаем всех пользователей
     users = db.get_all_users()
     
     # Сохраняем рассылку
     broadcast_id = db.save_broadcast(admin_id, message_text)
-    
-    await update.message.reply_text(
-        f"📨 Начинаю рассылку {len(users)} пользователям...\n"
-        f"Это может занять некоторое время."
-    )
     
     # Отправляем сообщения
     success = 0
@@ -435,7 +447,7 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Формируем клавиатуру с кнопкой ответа
             keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("💬 Ответить", callback_data=f'support_write')
+                InlineKeyboardButton("💬 Ответить", callback_data='support_write')
             ]])
             
             await context.bot.send_message(
@@ -452,13 +464,16 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обновляем статистику
     db.update_broadcast_count(broadcast_id, success)
     
+    # Кнопка возврата
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("◀️ Назад к рассылкам", callback_data='admin_broadcast')
+    ]])
+    
     await update.message.reply_text(
         f"✅ Рассылка завершена!\n"
         f"📨 Успешно отправлено: {success}\n"
         f"❌ Не удалось отправить: {failed}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ В админку", callback_data='admin')
-        ]])
+        reply_markup=keyboard
     )
     
     return ConversationHandler.END
