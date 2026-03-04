@@ -52,9 +52,15 @@ async def admin_messages_search_results(update: Update, context: ContextTypes.DE
         # Обрезаем слишком длинные сообщения
         short_text = msg_text[:100] + "..." if len(msg_text) > 100 else msg_text
         
+        # Форматируем время
+        if msg_time:
+            time_str = msg_time.strftime("%d.%m.%Y %H:%M")
+        else:
+            time_str = ""
+        
         text += f"👤 <b>{user_name}</b> (ID:{user_id})\n"
         text += f"📝 {short_text}\n"
-        text += f"🕒 {msg_time[:16]}\n\n"
+        text += f"🕒 {time_str}\n\n"
         
         keyboard.append([InlineKeyboardButton(
             f"💬 Перейти к диалогу", 
