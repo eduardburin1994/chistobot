@@ -10,8 +10,9 @@ from keyboards.client_keyboards import create_date_keyboard, get_back_button, ge
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from config import user_data
-import datetime  # Добавлен импорт datetime
-import re  # Добавлен импорт re
+import datetime
+import re
+from utils.order_state import order_state  # Импорт для сохранения состояния
 
 # =============== НАСТРОЙКИ ГЕОГРАФИИ ===============
 ALLOWED_STREETS = [
@@ -65,67 +66,26 @@ def get_bag_word(count):
 # ======================================================
 
 async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало процесса заказа - выбор адреса"""
-    
+    """Начало процесса заказа - выбор адреса (из избранного или новый)"""
     # Определяем источник вызова
     if update.callback_query:
-        user_id = update.callback_query.from_user.id
-        message = update.callback_query.message
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+        user = update.effective_user
     else:
         user_id = update.effective_user.id
-        message = update.message
-    
-    # ===== ЗАЩИТА ОТ СПАМА (НЕ ДЛЯ АДМИНОВ) =====
-    from utils.antiflood import rate_limiter
-    from config import admin_data
-    
-    # Проверяем, админ ли пользователь
-    if user_id not in admin_data['admins']:
-        can_order, wait_time = rate_limiter.can_do_action(user_id, 'order')
-        
-        if not can_order:
-            minutes = wait_time // 60
-            warning_text = (
-                f"⏳ <b>Слишком частые заказы</b>\n\n"
-                f"Вы можете оформить новый заказ через {minutes} минут.\n"
-                f"Это защита от спама."
-            )
-            
-            if update.callback_query:
-                await update.callback_query.edit_message_text(
-                    warning_text,
-                    parse_mode='HTML'
-                )
-            else:
-                await update.message.reply_text(
-                    warning_text,
-                    parse_mode='HTML'
-                )
-            return ConversationHandler.END
-    else:
-        print(f"👑 Админ {user_id} оформляет заказ без ограничений")
-    # ===========================
-    
-    # ... остальной код функции (ничего не меняем) ...
-    
-    # ... остальной код функции (ничего не меняем) ...
-    """Начало процесса заказа - выбор адреса (из избранного или новый)"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
-    if 'mock_callback_query' in context.bot_data:
-        query = context.bot_data['mock_callback_query']
-        del context.bot_data['mock_callback_query']
-    else:
-        query = update.callback_query
-    
-    await query.answer()
-    
-    user_id = query.from_user.id
-    user = update.effective_user
+        user = update.effective_user
     
     print(f"👤 Новый заказ от пользователя {user_id}")
     print(f"  • Username: @{user.username}")
     print(f"  • First name: {user.first_name}")
     print(f"  • Last name: {user.last_name}")
+    
+    # Проверяем, админ ли пользователь для обхода ограничений
+    from config import admin_data
+    if user_id in admin_data['admins']:
+        print(f"👑 Админ {user_id} оформляет заказ без ограничений")
     
     # Инициализируем данные пользователя
     if user_id not in user_data:
@@ -147,6 +107,9 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_info = db.get_user_by_id(user_id)
     
+    # Сохраняем начальное состояние
+    order_state.save_state(user_id, NAME, user_data.get(user_id, {}))
+    
     # Проверяем, есть ли телефон и адрес
     if user_info and user_info[4]:  # если есть телефон
         user_data[user_id]['name'] = user_info[2] or user.first_name
@@ -157,19 +120,23 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await choose_address(update, context)
     else:
         # Если нет телефона - запрашиваем имя
-        await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
+        if update.callback_query:
+            await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
+        else:
+            await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
 
 async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор адреса при заказе (из избранного или новый)"""
-    # Проверяем, откуда пришел вызов - из callback или напрямую
+    # Проверяем, откуда пришел вызов - из callback или из сообщения
     if update.callback_query:
+        # Если из callback (обычный путь)
         query = update.callback_query
         await query.answer()
         user_id = query.from_user.id
         message_func = query.edit_message_text
     else:
-        # Если вызвана не из callback (например, из start_order)
+        # Если из сообщения (после ввода телефона)
         user_id = update.effective_user.id
         message_func = update.message.reply_text
     
@@ -198,6 +165,9 @@ async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Кнопка для нового адреса
     keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
     keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, SELECT_ADDRESS, user_data.get(user_id, {}))
     
     await message_func(
         text,
@@ -265,6 +235,9 @@ async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_
     user_data[user_id]['intercom'] = intercom or ''
     user_data[user_id]['address_name'] = name
     
+    # Сохраняем состояние
+    order_state.save_state(user_id, DATE, user_data[user_id])
+    
     # Переходим к выбору даты
     keyboard = create_date_keyboard()
     await query.edit_message_text(
@@ -289,6 +262,9 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]['bags_count'] = bags
     user_data[user_id]['bags_selected'] = True
     
+    # Сохраняем состояние
+    order_state.save_state(user_id, PAYMENT_METHOD, user_data[user_id])
+    
     # Переходим к выбору способа оплаты
     await query.edit_message_text(
         f"🛍 Выбрано: <b>{bags} {get_bag_word(bags)}</b>\n\n"
@@ -298,39 +274,36 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PAYMENT_METHOD
 
-# handlers/client.py
-
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение нового адреса с проверкой района и наличия номера дома"""
     user_id = update.effective_user.id
     address = update.message.text
     
-    # 👇 ДОБАВЬ ЭТИ СТРОКИ ДЛЯ ОТЛАДКИ
-    print(f"🔥🔥🔥 new_address ВЫЗВАНА для пользователя {user_id}")
-    print(f"🔥 Получен адрес: {address}")
-    print(f"🔥 Текущее состояние пользователя в ConversationHandler: {context.user_data.get('_state')}")
-    # 👆
-
     print(f"🏠 [new_address] Вход в функцию. User: {user_id}, Адрес: {address}")
-
+    
     # =============== ПРОВЕРКА НАЛИЧИЯ НОМЕРА ДОМА ===============
-    import re
     if not re.search(r'\d', address):
-        print(f"🏠 [new_address] Ошибка: нет номера дома.")
         await update.message.reply_text(
             "❌ <b>Укажите номер дома</b>\n\n"
             "Пожалуйста, введите адрес вместе с номером дома.\n"
             "Например: <i>Октябрьский проспект, д. 50</i> или <i>Левитана 23</i>",
             parse_mode='HTML'
         )
-        # Возвращаем то же состояние, чтобы пользователь попробовал снова
         return NEW_ADDRESS
     # ============================================================
-
+    
+    # Проверяем, не вводил ли пользователь уже адрес
+    if user_id in user_data and user_data[user_id].get('address_confirmed', False):
+        await update.message.reply_text(
+            "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
     # =============== ПРОВЕРКА РАЙОНА ===============
-    from handlers.client import is_address_allowed
     if not is_address_allowed(address):
-        print(f"🏠 [new_address] Ошибка: адрес вне зоны обслуживания.")
         streets_list = (
             "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
             "• Октябрьский проспект\n"
@@ -341,7 +314,7 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Улица Псковская\n"
             "• Улица С.Я. Лемешева\n\n"
         )
-
+        
         await update.message.reply_text(
             f"❌ <b>К сожалению, этот адрес не входит в зону обслуживания</b>\n\n"
             f"{streets_list}"
@@ -351,21 +324,20 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return NEW_ADDRESS
     # ==============================================
-
-    # --- ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ, СОХРАНЯЕМ АДРЕС ---
-    from config import user_data
+    
     if user_id not in user_data:
         user_data[user_id] = {}
-        print(f"🏠 [new_address] Создана новая запись в user_data для {user_id}")
-
+        print(f"⚠️ Создана новая запись для пользователя {user_id}")
+    
     user_data[user_id]['street_address'] = address
-    print(f"🏠 [new_address] Адрес сохранен: {user_data[user_id]['street_address']}")
-
-    # Отправляем запрос на ввод подъезда
+    user_data[user_id]['address_confirmed'] = True
+    print(f"✅ Сохранён новый адрес: {user_data[user_id]['street_address']}")
+    print(f"🔄 Переходим к состоянию NEW_ENTRANCE ({NEW_ENTRANCE})")
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, NEW_ENTRANCE, user_data[user_id])
+    
     await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
-    print(f"🏠 [new_address] Отправлен запрос подъезда. Переход в состояние NEW_ENTRANCE.")
-
-    # ВОЗВРАЩАЕМ СЛЕДУЮЩЕЕ СОСТОЯНИЕ
     return NEW_ENTRANCE
 
 async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -375,6 +347,10 @@ async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
     text = update.message.text
     user_data[user_id]['entrance'] = text if text not in ['0', '-'] else ''
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, NEW_FLOOR, user_data[user_id])
+    
     await update.message.reply_text("📶 Введите этаж (или 0 если нет):")
     return NEW_FLOOR
 
@@ -385,6 +361,10 @@ async def new_floor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
     text = update.message.text
     user_data[user_id]['floor'] = text if text not in ['0', '-'] else ''
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, NEW_APARTMENT, user_data[user_id])
+    
     await update.message.reply_text("🔢 Введите номер квартиры (или 0 если нет):")
     return NEW_APARTMENT
 
@@ -395,6 +375,10 @@ async def new_apartment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
     text = update.message.text
     user_data[user_id]['apartment'] = text if text not in ['0', '-'] else ''
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, NEW_INTERCOM, user_data[user_id])
+    
     await update.message.reply_text("🔔 Введите код домофона (или 0 если нет):")
     return NEW_INTERCOM
 
@@ -405,6 +389,9 @@ async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {}
     text = update.message.text
     user_data[user_id]['intercom'] = text if text not in ['0', '-'] else ''
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, DATE, user_data[user_id])
     
     # Обновляем адрес в базе данных
     import database as db
@@ -533,8 +520,6 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"🔥🔥🔥 get_name ВЫЗВАНА для пользователя {user_id}")
     print(f"🔥 Текст сообщения: {update.message.text}")
     
-    from config import user_data
-    
     if user_id not in user_data:
         user_data[user_id] = {}
         print(f"🔥 Создана новая запись для {user_id}")
@@ -542,10 +527,12 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]['name'] = update.message.text
     print(f"🔥 Имя сохранено: {user_data[user_id]['name']}")
     
+    # Сохраняем состояние
+    order_state.save_state(user_id, PHONE, user_data[user_id])
+    
     await update.message.reply_text("📞 Шаг 2: Введите номер телефона:")
     print(f"🔥 Отправлен запрос телефона, возвращаю PHONE")
     
-    from constants import PHONE
     return PHONE
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -553,8 +540,6 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     print(f"📞📞📞 get_phone ВЫЗВАНА для пользователя {user_id}")
     print(f"📞 Текст сообщения: {update.message.text}")
-    
-    from config import user_data
     
     if user_id not in user_data:
         user_data[user_id] = {}
@@ -567,6 +552,9 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import database as db
     db.update_user_phone(user_id, user_data[user_id]['phone'])
     print(f"📞 Телефон сохранен в БД")
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, SELECT_ADDRESS, user_data[user_id])
     
     # Переходим к выбору адреса
     print(f"📞 Вызываю choose_address")
@@ -595,6 +583,9 @@ async def get_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id].get('intercom', '')
     )
     
+    # Сохраняем состояние
+    order_state.save_state(user_id, DATE, user_data[user_id])
+    
     # Показываем клавиатуру с датами
     keyboard = create_date_keyboard()
     await update.message.reply_text(
@@ -610,10 +601,11 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = query.from_user.id
     print(f"📅 date_callback для пользователя {user_id}")
+    print(f"📅 Данные пользователя: {user_data.get(user_id, {})}")
     
     # Проверяем, есть ли данные пользователя
     if user_id not in user_data:
-        print(f"⚠️ Нет данных для пользователя {user_id}")
+        print(f"⚠️ Нет данных для пользователя {user_id}, создаем новые")
         user_data[user_id] = {}
     
     selected_date = query.data.replace('date_', '')
@@ -621,12 +613,15 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"📅 Выбрана дата: {selected_date}")
     print(f"🕐 Текущее время: {datetime.datetime.now().strftime('%H:%M:%S')}")
     
-    # Получаем доступные слоты с учётом истекших
+    # Получаем доступные слоты с учётом истекших и рабочего времени
     import database as db
     available_slots, slot_info = db.get_available_slots(selected_date)
     
     print(f"📅 Доступные слоты после фильтрации: {available_slots}")
     print(f"📊 Информация о слотах: {slot_info}")
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, TIME, user_data[user_id])
     
     # Упрощённая клавиатура — только названия слотов
     time_keyboard = []
@@ -645,11 +640,15 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return DATE
     
     print(f"✅ Отправляем клавиатуру с {len(available_slots)} слотами")
-    await query.edit_message_text(
-        f"📅 Дата: {selected_date}\n\n"
-        f"⏰ Выберите удобное время:",
-        reply_markup=InlineKeyboardMarkup(time_keyboard)
-    )
+    try:
+        await query.edit_message_text(
+            f"📅 Дата: {selected_date}\n\n"
+            f"⏰ Выберите удобное время:",
+            reply_markup=InlineKeyboardMarkup(time_keyboard)
+        )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            print(f"Ошибка в date_callback: {e}")
     return TIME
 
 async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -691,6 +690,9 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in user_data:
             del user_data[user_id]
         return DATE
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, BAGS, user_data[user_id])
     
     # ПОКАЗЫВАЕМ КНОПКИ С КОЛИЧЕСТВОМ МЕШКОВ
     from keyboards.client_keyboards import get_bags_keyboard
@@ -737,6 +739,9 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
             return PAYMENT_METHOD
         
         user_data[user_id]['payment_method'] = payment_method
+        
+        # Сохраняем состояние
+        order_state.save_state(user_id, CONFIRM_ORDER, user_data[user_id])
         
         # ===== ПРОВЕРКА БАЛАНСА =====
         conn = db.get_connection()
@@ -785,8 +790,6 @@ async def use_bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     choice = query.data
     
-    from config import user_data
-    
     if user_id not in user_data:
         user_data[user_id] = {}
     
@@ -795,8 +798,9 @@ async def use_bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         user_data[user_id]['use_bonus'] = False
     
-    # Переходим к подтверждению заказа
-    from handlers.client import confirm_order_before_final
+    # Сохраняем состояние
+    order_state.save_state(user_id, CONFIRM_ORDER, user_data[user_id])
+    
     await confirm_order_before_final(update, context)
     return CONFIRM_ORDER
 
@@ -826,6 +830,9 @@ async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
         )
         return ConversationHandler.END
+    
+    # Сохраняем состояние
+    order_state.save_state(user_id, BAGS, user_data[user_id])
     
     # Возвращаемся к выбору времени
     await query.edit_message_text(
@@ -888,6 +895,9 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Сохраняем количество
         user_data[user_id]['bags_count'] = bags
         user_data[user_id]['bags_selected'] = True
+        
+        # Сохраняем состояние
+        order_state.save_state(user_id, PAYMENT_METHOD, user_data[user_id])
         
         # Переходим к оплате
         await update.message.reply_text(
@@ -968,6 +978,9 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
     user_data[user_id]['final_price'] = final_price
     user_data[user_id]['used_bonus'] = balance if use_bonus else 0
     
+    # Сохраняем состояние
+    order_state.save_state(user_id, CONFIRM_ORDER, user_data[user_id])
+    
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
@@ -984,6 +997,9 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         user_id = query.from_user.id
         print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")
+        
+        # Очищаем состояние после успешного заказа
+        order_state.clear_state(user_id)
         
         # Проверяем, есть ли данные пользователя
         if user_id not in user_data:
@@ -1677,535 +1693,4 @@ async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return SUPPORT_MESSAGE
 
-async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение сообщения от клиента"""
-    user_id = update.effective_user.id
-    user = update.effective_user
-    message_text = update.message.text
-    
-    import database as db
-    message_id = db.save_message(user_id, message_text)
-    
-    from keyboards.client_keyboards import get_main_keyboard
-    is_admin = user_id in context.bot_data.get('admins', [])
-    await update.message.reply_text(
-        "✅ <b>Сообщение доставлено!</b>\n\n"
-        "Спасибо за обращение. Мы ответим вам в ближайшее время.\n"
-        "Обычно мы отвечаем в течение нескольких часов.",
-        parse_mode='HTML',
-        reply_markup=get_main_keyboard(is_admin)
-    )
-    
-    from config import admin_data
-    from handlers.admin import notify_admin_about_message
-    
-    username = f"@{user.username}" if user.username else "нет username"
-    first_name = user.first_name or ""
-    
-    for admin_id in admin_data['admins']:
-        try:
-            await notify_admin_about_message(
-                update, context, admin_id, user_id, username, first_name, message_text, message_id
-            )
-        except Exception as e:
-            print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
-    
-    return ConversationHandler.END
-
-async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор заказа для детального просмотра"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    import database as db
-    orders = db.get_user_orders(user_id)
-    
-    if not orders:
-        await query.edit_message_text(
-            "📭 У вас нет заказов",
-            reply_markup=get_back_button()
-        )
-        return
-    
-    keyboard = []
-    for order in orders[:5]:
-        # УНИВЕРСАЛЬНАЯ РАСПАКОВКА - берем только то, что нам нужно
-        # order может быть кортежем разной длины, поэтому используем индексы
-        order_id = order[0]  # ID заказа всегда первый
-        date = order[9] if len(order) > 9 else "неизвестно"  # дата
-        time = order[10] if len(order) > 10 else "неизвестно"  # время
-        bags = order[11] if len(order) > 11 else 0  # мешки
-        status = order[13] if len(order) > 13 else 'unknown'  # статус
-        
-        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-        button_text = f"{status_emoji} #{order_id} от {date} {time} ({bags} меш.)"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f'order_detail_{order_id}')])
-    
-    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data='my_orders_detail')])
-    
-    await query.edit_message_text(
-        "Выберите заказ для просмотра:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детальный просмотр истории заказов"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
-    if 'mock_callback_query' in context.bot_data:
-        query = context.bot_data['mock_callback_query']
-        del context.bot_data['mock_callback_query']
-    else:
-        query = update.callback_query
-    
-    await query.answer()
-    
-    user_id = query.from_user.id
-    import database as db
-    orders = db.get_user_orders(user_id)
-    
-    if not orders:
-        await query.edit_message_text(
-            "📭 У вас пока нет заказов.",
-            reply_markup=get_back_button()
-        )
-        return
-    
-    text = "📋 <b>Ваши последние заказы:</b>\n\n"
-    
-    for i, order in enumerate(orders[:3]):
-        order_id, _, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
-        
-        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-        status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
-        
-        full_address = street
-        details = []
-        if entrance:
-            details.append(f"под. {entrance}")
-        if floor:
-            details.append(f"эт. {floor}")
-        if apt:
-            details.append(f"кв. {apt}")
-        if intercom:
-            details.append(f"домофон {intercom}")
-        if details:
-            full_address += f" ({', '.join(details)})"
-        
-        text += f"{status_emoji} <b>Заказ #{order_id}</b>\n"
-        text += f"📅 {date} {time}\n"
-        text += f"📍 {full_address}\n"
-        text += f"🛍 {bags} мешков - {price} ₽\n"
-        text += f"📊 Статус: {status_text}\n\n"
-    
-    if len(orders) > 3:
-        text += f"... и ещё {len(orders) - 3} заказов"
-    
-    keyboard = [
-        [InlineKeyboardButton("🔍 Подробнее о заказе", callback_data='order_detail_select')],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
-    ]
-    
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def repeat_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Повтор предыдущего заказа"""
-    query = update.callback_query
-    await query.answer()
-    
-    order_id = int(query.data.replace('repeat_order_', ''))
-    import database as db
-    order = db.get_order_by_id(order_id)
-    
-    if not order:
-        await query.edit_message_text("❌ Заказ не найден")
-        return
-    
-    # Заполняем данные из прошлого заказа
-    user_id = query.from_user.id
-    user_data[user_id] = {
-        'name': order[2],
-        'phone': order[3],
-        'street_address': order[4],
-        'entrance': order[5] or '',
-        'floor': order[6] or '',
-        'apartment': order[7] or '',
-        'intercom': order[8] or ''
-    }
-    
-    # Переходим к выбору даты
-    from keyboards.client_keyboards import create_date_keyboard
-    keyboard = create_date_keyboard()
-    await query.edit_message_text(
-        "📅 Выберите новую дату для повторного заказа:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return DATE
-
-async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Детальный просмотр конкретного заказа"""
-    query = update.callback_query
-    await query.answer()
-    
-    order_id = int(query.data.replace('order_detail_', ''))
-    
-    import database as db
-    order = db.get_order_by_id(order_id)
-    
-    if not order:
-        await query.edit_message_text(
-            "❌ Заказ не найден",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад", callback_data='order_detail_select')
-            ]])
-        )
-        return
-    
-    # order: (id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created)
-    order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
-    
-    status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-    status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
-    
-    # Формируем адрес
-    full_address = street
-    details = []
-    if entrance:
-        details.append(f"под. {entrance}")
-    if floor:
-        details.append(f"эт. {floor}")
-    if apt:
-        details.append(f"кв. {apt}")
-    if intercom:
-        details.append(f"домофон {intercom}")
-    if details:
-        full_address += f" ({', '.join(details)})"
-    
-    text = (
-        f"{status_emoji} <b>Заказ #{order_id}</b>\n\n"
-        f"👤 {name}\n"
-        f"📞 {phone}\n"
-        f"📍 {full_address}\n"
-        f"📅 {date} {time}\n"
-        f"🛍 {bags} мешков - {price} ₽\n"
-        f"📊 Статус: {status_text}\n\n"
-    )
-    
-    keyboard = [[InlineKeyboardButton("◀️ Назад к списку", callback_data='order_detail_select')]]
-    
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню избранных адресов"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
-    if 'mock_callback_query' in context.bot_data:
-        query = context.bot_data['mock_callback_query']
-        del context.bot_data['mock_callback_query']
-    else:
-        query = update.callback_query
-    
-    await query.answer()
-    
-    user_id = query.from_user.id
-    import database as db
-    
-    favorites = db.get_user_favorite_addresses(user_id)
-    
-    text = "⭐ <b>Мои избранные адреса</b>\n\n"
-    
-    if favorites:
-        for addr in favorites[:5]:
-            addr_id, name, street, entrance, floor, apt, intercom, created = addr
-            
-            full = street
-            details = []
-            if entrance:
-                details.append(f"под. {entrance}")
-            if floor:
-                details.append(f"эт. {floor}")
-            if apt:
-                details.append(f"кв. {apt}")
-            if intercom:
-                details.append(f"домофон {intercom}")
-            if details:
-                full += f" ({', '.join(details)})"
-            
-            text += f"🏷 <b>{name}</b>\n📍 {full}\n\n"
-    else:
-        text += "У вас пока нет избранных адресов"
-    
-    keyboard = [
-        [InlineKeyboardButton("➕ Добавить текущий адрес", callback_data='favorite_add')],
-        [InlineKeyboardButton("✏️ Управление адресами", callback_data='manage_favorites')],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
-    ]
-    
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def favorite_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Добавление адреса в избранное из базы данных"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    
-    import database as db
-    
-    # Получаем данные пользователя из базы данных
-    user_info = db.get_user_by_id(user_id)
-    
-    # Проверяем, есть ли у пользователя сохранённый адрес в базе
-    if not user_info or not user_info[5]:
-        await query.edit_message_text(
-            "❌ У вас ещё нет сохранённого адреса.\n"
-            "Сначала оформите заказ, чтобы адрес сохранился в базе.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        return
-    
-    # Проверяем, не добавлен ли уже этот адрес в избранное
-    favorites = db.get_user_favorite_addresses(user_id)
-    for fav in favorites:
-        if (fav[2] == user_info[5] and
-            fav[3] == user_info[6] and
-            fav[4] == user_info[7] and
-            fav[5] == user_info[8] and
-            fav[6] == user_info[9]):
-            await query.edit_message_text(
-                "❌ Этот адрес уже есть в избранном!",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu')
-                ]])
-            )
-            return
-    
-    # Спрашиваем название для адреса
-    await query.edit_message_text(
-        "Введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):"
-    )
-    return FAVORITE_NAME
-
-async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение адреса из базы данных в избранное"""
-    user_id = update.effective_user.id
-    address_name = update.message.text
-    
-    import database as db
-    
-    # Получаем данные пользователя из базы
-    user_info = db.get_user_by_id(user_id)
-    
-    if not user_info or not user_info[5]:
-        await update.message.reply_text(
-            "❌ Ошибка: адрес не найден в базе данных.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-            ]])
-        )
-        return ConversationHandler.END
-    
-    # Сохраняем адрес в избранное
-    db.save_favorite_address(
-        user_id,
-        address_name,
-        user_info[5],
-        user_info[6] or '',
-        user_info[7] or '',
-        user_info[8] or '',
-        user_info[9] or ''
-    )
-    
-    # Формируем красивый адрес для подтверждения
-    full_address = user_info[5]
-    details = []
-    if user_info[6]:
-        details.append(f"под. {user_info[6]}")
-    if user_info[7]:
-        details.append(f"эт. {user_info[7]}")
-    if user_info[8]:
-        details.append(f"кв. {user_info[8]}")
-    if user_info[9]:
-        details.append(f"домофон {user_info[9]}")
-    if details:
-        full_address += f" ({', '.join(details)})"
-    
-    await update.message.reply_text(
-        f"✅ Адрес '{address_name}' сохранён в избранное!\n\n"
-        f"📍 {full_address}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu')
-        ]])
-    )
-    
-    return ConversationHandler.END
-
-# =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
-
-async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия start_order для reply-кнопок"""
-    user_id = update.effective_user.id
-    user = update.effective_user
-    
-    print(f"👤 Новый заказ от пользователя {user_id} (reply)")
-    
-    # Инициализируем данные пользователя
-    if user_id not in user_data:
-        user_data[user_id] = {}
-    
-    import database as db
-    db.add_user(
-        user_id=user_id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name
-    )
-    
-    if user.username:
-        db.update_user_username(user_id, user.username)
-    
-    user_info = db.get_user_by_id(user_id)
-    
-    if user_info and user_info[4]:  # если есть телефон
-        user_data[user_id]['name'] = user_info[2] or user.first_name
-        user_data[user_id]['phone'] = user_info[4]
-        user_data[user_id]['has_saved_data'] = True
-        # Вызываем выбор адреса
-        return await choose_address_reply(update, context)
-    else:
-        await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
-        return NAME
-
-async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор адреса при заказе (из избранного или новый)"""
-    # Проверяем, откуда пришел вызов - из callback или из сообщения
-    if update.callback_query:
-        # Если из callback (обычный путь)
-        query = update.callback_query
-        await query.answer()
-        user_id = query.from_user.id
-        message_func = query.edit_message_text
-        chat_id = query.message.chat_id
-    else:
-        # Если из сообщения (после ввода телефона)
-        user_id = update.effective_user.id
-        message_func = update.message.reply_text
-        chat_id = update.message.chat_id
-    
-    import database as db
-    
-    # Получаем избранные адреса пользователя
-    favorites = db.get_user_favorite_addresses(user_id)
-    
-    text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
-    
-    keyboard = []
-    
-    # Добавляем кнопки с избранными адресами
-    if favorites:
-        for addr in favorites[:5]:
-            addr_id, name, street, entrance, floor, apt, intercom, _ = addr
-            
-            # Формируем краткое описание адреса
-            short_address = street
-            if apt:
-                short_address += f", кв.{apt}"
-            
-            button_text = f"{name} - {short_address}"
-            keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
-    
-    # Кнопка для нового адреса
-    keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
-    keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
-    
-    await message_func(
-        text,
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return SELECT_ADDRESS
-
-async def my_orders_detail_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия my_orders_detail для reply-кнопок"""
-    user_id = update.effective_user.id
-    import database as db
-    orders = db.get_user_orders(user_id)
-    
-    if not orders:
-        await update.message.reply_text("📭 У вас пока нет заказов.")
-        return
-    
-    text = "📋 <b>Ваши последние заказы:</b>\n\n"
-    
-    for i, order in enumerate(orders[:3]):
-        order_id, _, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
-        
-        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
-        status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
-        
-        full_address = street
-        details = []
-        if entrance:
-            details.append(f"под. {entrance}")
-        if floor:
-            details.append(f"эт. {floor}")
-        if apt:
-            details.append(f"кв. {apt}")
-        if intercom:
-            details.append(f"домофон {intercom}")
-        if details:
-            full_address += f" ({', '.join(details)})"
-        
-        text += f"{status_emoji} <b>Заказ #{order_id}</b>\n"
-        text += f"📅 {date} {time}\n"
-        text += f"📍 {full_address}\n"
-        text += f"🛍 {bags} мешков - {price} ₽\n"
-        text += f"📊 Статус: {status_text}\n\n"
-    
-    if len(orders) > 3:
-        text += f"... и ещё {len(orders) - 3} заказов"
-    
-    keyboard = [
-        [InlineKeyboardButton("🔍 Подробнее о заказе", callback_data='order_detail_select')],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
-    ]
-    
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def favorite_addresses_menu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия favorite_addresses_menu для reply-кнопок"""
-    user_id = update.effective_user.id
-    import database as db
-    
-    favorites = db.get_user_favorite_addresses(user_id)
-    
-    text = "⭐ <b>Мои избранные адреса</b>\n\n"
-    
-    if favorites:
-        for addr in favorites[:5]:
-            addr_id, name, street, entrance, floor, apt, intercom, created = addr
-            
-            full = street
-            details = []
-            if entrance:
-                details.append(f"под. {entrance}")
-            if floor:
-                details.append(f"эт. {floor}")
-            if apt:
-                details.append(f"кв. {apt}")
-            if intercom:
-                details.append(f"домофон {intercom}")
-            if details:
-                full += f" ({', '.join(details)})"
-            
-            text += f"🏷 <b>{name}</b>\n📍 {full}\n\n"
-    else:
-        text += "У вас пока нет избранных адресов"
-    
-    keyboard = [
-        [InlineKeyboardButton("➕ Добавить текущий адрес", callback_data='favorite_add')],
-        [InlineKeyboardButton("✏️ Управление адресами", callback_data='manage_favorites')],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
-    ]
-    
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+async def support_message(update: Update,
