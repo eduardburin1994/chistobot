@@ -624,32 +624,38 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         user_id = query.from_user.id
         print(f"💳 payment_method_handler для пользователя {user_id}")
-    
-    if user_id not in user_data:
-        print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
-        user_data[user_id] = {}
-    
-    payment_method = query.data.replace('pay_', '')
-    
-    if payment_method == 'yookassa':
-        await query.edit_message_text(
-            "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
-            "🔧 Мы работаем над подключением этого способа.\n"
-            "Пожалуйста, выберите другой способ оплаты:\n"
-            "• 💵 Наличные курьеру\n"
-            "• 💳 Перевод на карту курьера\n\n"
-            "Приносим извинения за неудобства!",
-            parse_mode='HTML',
-            reply_markup=get_payment_keyboard()
-        )
-        return PAYMENT_METHOD
-    
-    user_data[user_id]['payment_method'] = payment_method
-    
-    # Переходим к подтверждению
-    from handlers.client import confirm_order_before_final
-    await confirm_order_before_final(update, context)
-    return CONFIRM_ORDER
+        
+        if user_id not in user_data:
+            print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
+            user_data[user_id] = {}
+        
+        payment_method = query.data.replace('pay_', '')
+        
+        if payment_method == 'yookassa':
+            await query.edit_message_text(
+                "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
+                "🔧 Мы работаем над подключением этого способа.\n"
+                "Пожалуйста, выберите другой способ оплаты:\n"
+                "• 💵 Наличные курьеру\n"
+                "• 💳 Перевод на карту курьера\n\n"
+                "Приносим извинения за неудобства!",
+                parse_mode='HTML',
+                reply_markup=get_payment_keyboard()
+            )
+            return PAYMENT_METHOD
+        
+        user_data[user_id]['payment_method'] = payment_method
+        
+        # Переходим к подтверждению
+        from handlers.client import confirm_order_before_final
+        await confirm_order_before_final(update, context)
+        return CONFIRM_ORDER
+        
+    except Exception as e:
+        print(f"❌ Ошибка в payment_method_handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return ConversationHandler.END
     
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к выбору времени"""
