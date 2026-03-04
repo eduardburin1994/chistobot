@@ -1151,7 +1151,7 @@ def restore_message(message_id):
     
     cur = conn.cursor()
     try:
-        cur.execute('UPDATE messages SET status = 'new' WHERE message_id = %s', (message_id,))
+        cur.execute("UPDATE messages SET status = 'new' WHERE message_id = %s", (message_id,))  # ← ИСПРАВЛЕНО
         conn.commit()
         print(f"✅ Сообщение #{message_id} восстановлено")
     except Exception as e:
