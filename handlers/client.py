@@ -1,5 +1,5 @@
 # handlers/client.py
-from constants import NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, PAYMENT_METHOD, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME, PAYMENT_METHODS
+from constants import USE_BONUS = 52, NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, PAYMENT_METHOD, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME, PAYMENT_METHODS
 from keyboards.client_keyboards import create_date_keyboard, get_back_button, get_payment_keyboard
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
@@ -632,14 +632,13 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка выбора способа оплаты"""
     try:
-        query = update.callback_query
+        query = update.callquery
         await query.answer()
         
         user_id = query.from_user.id
         print(f"💳 payment_method_handler для пользователя {user_id}")
         
         if user_id not in user_data:
-            print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
             user_data[user_id] = {}
         
         payment_method = query.data.replace('pay_', '')
@@ -659,10 +658,64 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         user_data[user_id]['payment_method'] = payment_method
         
-        # Переходим к подтверждению
+        # ===== НОВЫЙ ШАГ: ПРОВЕРКА БАЛАНСА =====
+        # Получаем баланс пользователя
+        conn = db.get_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
+            balance = cur.fetchone()
+            if balance and balance[0] > 0:
+                # Если есть баллы, предлагаем использовать
+                user_data[user_id]['bonus_balance'] = balance[0]
+                
+                keyboard = [
+                    [
+                        InlineKeyboardButton(f"✅ Использовать {balance[0]} баллов", callback_data='use_bonus_yes'),
+                        InlineKeyboardButton("❌ Не использовать", callback_data='use_bonus_no')
+                    ]
+                ]
+                
+                await query.edit_message_text(
+                    f"🎁 <b>У вас есть {balance[0]} бонусных баллов!</b>\n\n"
+                    f"1 балл = 1 рубль скидки\n"
+                    f"Хотите использовать их для этого заказа?",
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return USE_BONUS
+        except Exception as e:
+            print(f"❌ Ошибка проверки баланса: {e}")
+        finally:
+            cur.close()
+            conn.close()
+        # ======================================
+        
+        # Если нет баллов, сразу показываем подтверждение
         from handlers.client import confirm_order_before_final
         await confirm_order_before_final(update, context)
         return CONFIRM_ORDER
+        
+    except Exception as e:
+        print(f"❌ Ошибка в payment_method_handler: {e}")
+        return ConversationHandler.END
+
+async def use_bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик выбора использования бонусов"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    choice = query.data
+    
+    if choice == 'use_bonus_yes':
+        user_data[user_id]['use_bonus'] = True
+    else:
+        user_data[user_id]['use_bonus'] = False
+    
+    from handlers.client import confirm_order_before_final
+    await confirm_order_before_final(update, context)
+    return CONFIRM_ORDER
         
     except Exception as e:
         print(f"❌ Ошибка в payment_method_handler: {e}")
@@ -764,6 +817,25 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
     bags = user_data[user_id]['bags_count']
     payment = user_data[user_id]['payment_method']
     
+    from utils.helpers import calculate_price
+    original_price = calculate_price(bags)
+    final_price = original_price
+    
+    # Проверяем, использованы ли бонусы
+    use_bonus = user_data[user_id].get('use_bonus', False)
+    bonus_text = ""
+    
+    if use_bonus:
+        balance = user_data[user_id].get('bonus_balance', 0)
+        if balance >= original_price:
+            # Можно оплатить полностью
+            final_price = 0
+            bonus_text = f"\n🎁 Скидка баллами: -{original_price} ₽\n💰 К оплате: 0 ₽ (бесплатно!)"
+        else:
+            # Частичная оплата
+            final_price = original_price - balance
+            bonus_text = f"\n🎁 Скидка баллами: -{balance} ₽\n💰 К оплате: {final_price} ₽"
+    
     payment_names = {
         'cash': '💵 Наличные',
         'card': '💳 Перевод на карту',
@@ -785,16 +857,21 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
         f"📍 {address}\n"
         f"📅 {date} {time}\n"
         f"🛍 {bags} {get_bag_word(bags)}\n"
-        f"💳 {payment_names.get(payment, payment)}\n\n"
+        f"💳 Оплата: {payment_names.get(payment, payment)}"
+        f"{bonus_text}\n\n"
         f"✅ Всё верно?"
     )
     
     keyboard = [
         [
             InlineKeyboardButton("✅ Да, подтвердить", callback_data='final_confirm'),
-            InlineKeyboardButton("✏️ Изменить", callback_data='change_address')  # ИСПРАВЛЕНО
+            InlineKeyboardButton("✏️ Изменить", callback_data='change_address')
         ]
     ]
+    
+    # Сохраняем финальную цену
+    user_data[user_id]['final_price'] = final_price
+    user_data[user_id]['used_bonus'] = balance if use_bonus else 0
     
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -890,6 +967,35 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
             return ConversationHandler.END
         
         order_id = result[0]
+        
+        # ===== СПИСАНИЕ БОНУСОВ =====
+        if user_data[user_id].get('use_bonus', False):
+            used_bonus = user_data[user_id].get('used_bonus', 0)
+            if used_bonus > 0:
+                conn = db.get_connection()
+                cur = conn.cursor()
+                try:
+                    # Списываем баллы
+                    cur.execute('''
+                        UPDATE users 
+                        SET referral_balance = referral_balance - %s 
+                        WHERE user_id = %s
+                    ''', (used_bonus, user_id))
+                    
+                    # Записываем трату
+                    cur.execute('''
+                        INSERT INTO referral_spendings (user_id, amount, order_id, created_at)
+                        VALUES (%s, %s, %s, %s)
+                    ''', (user_id, used_bonus, order_id, datetime.datetime.now()))
+                    
+                    conn.commit()
+                    print(f"✅ Списано {used_bonus} баллов у пользователя {user_id}")
+                except Exception as e:
+                    print(f"❌ Ошибка списания баллов: {e}")
+                finally:
+                    cur.close()
+                    conn.close()
+        # ============================
         
         # ===== НАЧИСЛЕНИЕ БАЛЛОВ ЗА РЕФЕРАЛА =====
         conn = db.get_connection()
