@@ -52,10 +52,15 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Добавляем сообщения (последние 10)
     for msg in messages[:10]:
-        msg_id, _, from_admin, msg_text, msg_time, is_read = msg
+        # msg: (message_id, user_id, from_admin, user_message, created_at, is_read)
+        msg_id = msg[0]
+        from_admin = msg[2]  # индекс 2, а не 1!
+        msg_text = msg[3]
+        msg_time = msg[4]
+        is_read = msg[5]
         
         # Форматируем время
-        time_str = msg_time.split('.')[0] if msg_time else ""
+        time_str = msg_time.strftime("%H:%M") if msg_time else ""
         
         if from_admin:
             sender = "👤 Админ"
