@@ -2,16 +2,6 @@
 import logging
 import asyncio
 import warnings
-from handlers.courier_auth import (
-    courier_command_start, courier_login_check, courier_logout,
-    ENTER_COURIER_PASSWORD
-)
-from handlers.courier import (
-    courier_main_menu, courier_active_orders, courier_take_order,
-    courier_complete_order, courier_completed_orders, courier_stats,
-    courier_show_phone, courier_back
-)
-
 # Импорты для реферальной системы
 from handlers.referral.core import referral_info, referral_history
 from handlers.referral.stats import referral_top
@@ -37,7 +27,7 @@ from config import TOKEN, admin_data
 from constants import *
 from keyboards.client_keyboards import get_main_keyboard, create_date_keyboard, get_back_button
 from handlers.client import (
-    get_name, use_bonus_handler, get_phone, get_intercom, date_callback, time_callback, get_bags, 
+    get_name, get_phone, get_intercom, date_callback, time_callback, get_bags, 
     support_start, support_message, start_order, check_address_handler, 
     new_address, new_entrance, new_floor, new_apartment, new_intercom,
     my_orders_detail, order_detail_select, favorite_addresses_menu,
@@ -45,7 +35,8 @@ from handlers.client import (
     select_favorite_address, new_address_start, manage_favorites, edit_favorite_menu,
     edit_favorite_name, save_favorite_name, delete_favorite_confirm, confirm_delete_favorite,
     favorite_add_after_order, payment_method_handler, back_to_bags, order_detail,
-    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order
+    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order,
+    use_bonus_handler  # Добавлен импорт
 )
 from handlers.admin import (
     handle_admin_actions, admin_panel, admin_orders, admin_clients, 
@@ -59,13 +50,13 @@ from handlers.admin import (
     admin_orders_cleanup, process_orders_cleanup,
     blacklist_remove_user, blacklist_remove_process,
     admin_referral_stats,
-    # Добавляем функции экспорта
-    admin_export_menu, export_orders, export_orders_process,
-    export_clients, export_stats, export_blacklist, export_messages
+    # Экспорт в Excel (закомментировано до добавления функций)
+    # admin_export_menu, export_orders, export_orders_process,
+    # export_clients, export_stats, export_blacklist, export_messages
 )
 from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
-    handle_new_chat_members, rules_command
+    handle_new_chat_members, rules_command, text_command_handler  # Добавлен импорт
 )
 
 # Константа для редактирования цен
@@ -88,7 +79,7 @@ async def button_handler(update: Update, context):
         await query.edit_message_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
 
-    # ========== 1. ОБРАБОТКА ДАТ ==========
+    # ========== ОБРАБОТКА ДАТ ==========
     if query.data.startswith('date_'):
         print(f"🔥🔥🔥 ОБРАБОТКА ДАТЫ В button_handler: {query.data}")
         
@@ -126,7 +117,7 @@ async def button_handler(update: Update, context):
         )
         return TIME
 
-    # ========== 2. ОБРАБОТКА ВРЕМЕНИ ==========
+    # ========== ОБРАБОТКА ВРЕМЕНИ ==========
     if query.data.startswith('time_'):
         print(f"⏰ ОБРАБОТКА ВРЕМЕНИ В button_handler: {query.data}")
         
@@ -145,7 +136,7 @@ async def button_handler(update: Update, context):
         )
         return BAGS
 
-    # ========== 3. ОБРАБОТКА КОЛИЧЕСТВА МЕШКОВ ==========
+    # ========== ОБРАБОТКА КОЛИЧЕСТВА МЕШКОВ ==========
     if query.data.startswith('bags_'):
         print(f"🛍 ОБРАБОТКА МЕШКОВ В button_handler: {query.data}")
         
@@ -165,7 +156,7 @@ async def button_handler(update: Update, context):
         )
         return PAYMENT_METHOD
 
-    # ========== 4. ОБРАБОТКА ОПЛАТЫ ==========
+    # ========== ОБРАБОТКА ОПЛАТЫ ==========
     if query.data.startswith('pay_'):
         print(f"💳 ОБРАБОТКА ОПЛАТЫ В button_handler: {query.data}")
         
@@ -210,15 +201,17 @@ async def button_handler(update: Update, context):
         await confirm_order_before_final(update, context)
         return CONFIRM_ORDER
 
-    # ========== 5. ПОДТВЕРЖДЕНИЕ ЗАКАЗА ==========
+    # ========== ПОДТВЕРЖДЕНИЕ ЗАКАЗА ==========
     if query.data == 'final_confirm':
         print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")
         from handlers.client import final_confirm_order
         await final_confirm_order(update, context)
         return ConversationHandler.END
 
-    # ========== 6. ВСЕ ОСТАЛЬНЫЕ ВАШИ КНОПКИ ==========
-    # (весь ваш существующий код с кнопками)
+    # ========== ИСПОЛЬЗОВАНИЕ БОНУСОВ ==========
+    if query.data in ['use_bonus_yes', 'use_bonus_no']:
+        await use_bonus_handler(update, context)
+        return USE_BONUS
 
     # Сначала обрабатываем точное совпадение
     if query.data == 'order_detail_select':
@@ -243,10 +236,6 @@ async def button_handler(update: Update, context):
     if query.data == 'referral_info':
         await referral_info(update, context)
         return ConversationHandler.END
-
-    if query.data in ['use_bonus_yes', 'use_bonus_no']:
-        await use_bonus_handler(update, context)
-        return USE_BONUS
     
     if query.data == 'referral_history':
         await referral_history(update, context)
@@ -291,6 +280,7 @@ async def button_handler(update: Update, context):
         user_id = query.from_user.id
         print(f"🔄 Пользователь {user_id} изменяет адрес")
         
+        from config import user_data
         if user_id in user_data:
             user_data[user_id].pop('street_address', None)
             user_data[user_id].pop('entrance', None)
@@ -365,10 +355,6 @@ async def button_handler(update: Update, context):
         await my_orders_detail(update, context)
         return ConversationHandler.END
     
-    if query.data == 'order_detail_select':
-        await order_detail_select(update, context)
-        return ConversationHandler.END
-    
     # Кнопки избранных адресов
     if query.data == 'favorite_menu':
         await favorite_addresses_menu(update, context)
@@ -421,11 +407,6 @@ async def button_handler(update: Update, context):
     
     if query.data == 'new_address_start':
         await new_address_start(update, context)
-        return ConversationHandler.END
-    
-    # Кнопки оплаты (уже обработаны выше, но оставляем для совместимости)
-    if query.data in ['pay_cash', 'pay_card', 'pay_yookassa']:
-        # Уже обработано выше, но если сюда попало - игнорируем
         return ConversationHandler.END
     
     if query.data == 'back_to_bags':
@@ -573,6 +554,11 @@ async def button_handler(update: Update, context):
         await show_user_id(update, context)
         return ConversationHandler.END
     
+    # Возврат заказа в работу
+    if query.data.startswith('reopen_'):
+        await reopen_order(update, context)
+        return ConversationHandler.END
+    
     return ConversationHandler.END
 
 async def main(set_webhook=True):
@@ -580,8 +566,7 @@ async def main(set_webhook=True):
     # Явная инициализация базы данных
     import database as db
     db.init_db()
-    db.init_referral_tables()  # ← ДОБАВЬ ЭТУ СТРОКУ
-    # db.reset_messages_table()  # ← ЗАКОММЕНТИРОВАНО
+    db.init_referral_tables()
     db.debug_messages_table()
     db.check_database_integrity()
     print("🚀 База данных проверена")
@@ -589,7 +574,7 @@ async def main(set_webhook=True):
     # Создаем приложение
     app = Application.builder().token(TOKEN).build()
     
-    # !!! В САМОМ НАЧАЛЕ определяем функцию отмены !!!
+    # Функция отмены
     async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Отмена текущего действия"""
         await update.message.reply_text("Действие отменено.")
@@ -665,7 +650,7 @@ async def main(set_webhook=True):
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
     
-    # ConversationHandler для черного списка (с добавлением удаления)
+    # ConversationHandler для черного списка
     blacklist_handler = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(blacklist_add_user, pattern='^blacklist_add_user$'),
@@ -696,7 +681,7 @@ async def main(set_webhook=True):
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
     
-    # ConversationHandler для приветствия (ЭТО ГЛАВНЫЙ ОБРАБОТЧИК /start)
+    # ConversationHandler для приветствия
     welcome_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -728,9 +713,8 @@ async def main(set_webhook=True):
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
-    # ====== 👇 ВОТ СЮДА ВСТАВЛЯЕМ НОВЫЕ ОБРАБОТЧИКИ ======
     
-    # ConversationHandler для ответов в диалогах (НОВЫЙ)
+    # ConversationHandler для ответов в диалогах
     dialog_reply_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_dialog_reply, pattern='^dialog_reply_')],
         states={
@@ -739,7 +723,7 @@ async def main(set_webhook=True):
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
     
-    # ConversationHandler для поиска сообщений (НОВЫЙ)
+    # ConversationHandler для поиска сообщений
     messages_search_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_messages_search, pattern='^admin_messages_search$')],
         states={
@@ -748,19 +732,17 @@ async def main(set_webhook=True):
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
     
-    # ConversationHandler для входа курьера
-    courier_login_handler = ConversationHandler(
-        entry_points=[CommandHandler('courier', courier_command_start)],
-        states={
-        ENTER_COURIER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, courier_login_check)]
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)]
-    )
-
-    
-    # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
+    # ============== ДОБАВЛЯЕМ ВСЕ ОБРАБОТЧИКИ ==============
+    # Английские команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rules", rules_command))
+    app.add_handler(CommandHandler("courier", courier_command_start))
+    app.add_handler(CommandHandler("admin", admin_command_start))
+    
+    # Команда отмены
+    app.add_handler(CommandHandler('cancel', cancel_command))
+    
+    # ConversationHandler'ы
     app.add_handler(welcome_handler)
     app.add_handler(conv_handler)
     app.add_handler(message_to_user_handler)
@@ -771,80 +753,20 @@ async def main(set_webhook=True):
     app.add_handler(support_handler)
     app.add_handler(price_edit_handler)
     app.add_handler(working_hours_handler)
-    app.add_handler(admin_login_handler) 
-    # Добавить обработчики кнопок курьера
-    app.add_handler(CallbackQueryHandler(courier_take_order, pattern='^courier_take_'))
-    app.add_handler(CallbackQueryHandler(courier_complete_order, pattern='^courier_done_'))
-    app.add_handler(CallbackQueryHandler(courier_show_phone, pattern='^show_phone_'))
-    app.add_handler(CallbackQueryHandler(courier_completed_orders, pattern='^courier_completed$'))
-    app.add_handler(CallbackQueryHandler(courier_stats, pattern='^courier_stats$'))
-    app.add_handler(CallbackQueryHandler(courier_active_orders, pattern='^courier_active_orders$'))
-    app.add_handler(CallbackQueryHandler(courier_back, pattern='^courier_back$'))
-
-    # Добавить обработчики reply-кнопок
-    app.add_handler(MessageHandler(filters.Regex('^📦 Активные заказы$'), courier_active_orders))
-    app.add_handler(MessageHandler(filters.Regex('^✅ Мои выполненные$'), courier_completed_orders))
-    app.add_handler(MessageHandler(filters.Regex('^📊 Моя статистика$'), courier_stats))
-    app.add_handler(MessageHandler(filters.Regex('^🚪 Выйти$'), courier_logout))
-    app.add_handler(courier_login_handler)
+    app.add_handler(admin_login_handler)
     app.add_handler(dialog_reply_handler)
     app.add_handler(messages_search_handler)
-    app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
+    
+    # Обработчики кнопок с pattern
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
+    
+    # Общий обработчик кнопок (В САМОМ КОНЦЕ!)
+    app.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Обработчики сообщений
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     
-    # Добавляем команду отмены
-    app.add_handler(CommandHandler('cancel', cancel_command))
-    
-    # ============== КОМАНДЫ (русские и английские) ==============
-    # Английские команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("rules", rules_command))
-    app.add_handler(CommandHandler("courier", courier_command_start))
-    app.add_handler(CommandHandler("admin", admin_command_start))
-
-    # Команда отмены (оставляем как есть)
-    app.add_handler(CommandHandler('cancel', cancel_command))
-
-    # Экспорт в Excel
-    #app.add_handler(CallbackQueryHandler(admin_export_menu, pattern='^admin_export_menu$'))
-    #app.add_handler(CallbackQueryHandler(export_orders, pattern='^export_orders$'))
-    #app.add_handler(CallbackQueryHandler(export_orders_process, pattern='^export_orders_'))
-    #app.add_handler(CallbackQueryHandler(export_clients, pattern='^export_clients$'))
-    #app.add_handler(CallbackQueryHandler(export_stats, pattern='^export_stats$'))
-    #app.add_handler(CallbackQueryHandler(export_blacklist, pattern='^export_blacklist$'))
-    #app.add_handler(CallbackQueryHandler(export_messages, pattern='^export_messages$'))
-    
-    # Добавить в bot.py (после других MessageHandler)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=1)
-
-async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает текстовые сообщения как команды"""
-    text = update.message.text.lower().strip()
-    
-    # Проверяем, не начинается ли с / (чтобы не конфликтовать с настоящими командами)
-    if text.startswith('/'):
-        return
-    
-    # Русские "команды" (просто текстовые триггеры)
-    if text == "старт" or text == "меню":
-        await start(update, context)
-    elif text == "админ" or text == "админка":
-        # Проверяем, админ ли пользователь
-        from config import admin_data
-        if update.effective_user.id in admin_data['admins']:
-            from handlers.admin import admin_panel_reply
-            await admin_panel_reply(update, context)
-        else:
-            await admin_command_start(update, context)
-    elif text == "курьер":
-        from handlers.courier_auth import courier_command_start
-        await courier_command_start(update, context)
-    elif text == "правила":
-        await rules_command(update, context)
-
     # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
-    from handlers.common import text_command_handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
 
     if set_webhook:
@@ -862,4 +784,9 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         print("🚀 Бот ЧистоBOT инициализирован для webhook")
         await app.initialize()
         await app.start()
+        
+        # Отладка для app.py
+        print(f"🔍 Отладка: main() возвращает {app}")
+        print(f"🔍 Отладка: есть ли app.bot? {hasattr(app, 'bot')}")
+        
         return app
