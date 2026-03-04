@@ -891,6 +891,26 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         order_id = result[0]
         
+        # ===== НАЧИСЛЕНИЕ БАЛЛОВ ЗА РЕФЕРАЛА =====
+        conn = db.get_connection()
+        cur = conn.cursor()
+        try:
+            # Проверяем, не пришёл ли пользователь по реферальной ссылке
+            cur.execute('SELECT referred_by FROM users WHERE user_id = %s', (user_id,))
+            referred_by = cur.fetchone()
+            
+            if referred_by and referred_by[0]:
+                referrer_id = referred_by[0]
+                # Начисляем баллы пригласившему
+                db.process_referral_reward(referrer_id, user_id, order_id)
+                print(f"✅ Начислены баллы за реферала {user_id} пользователю {referrer_id}")
+        except Exception as e:
+            print(f"❌ Ошибка проверки реферала: {e}")
+        finally:
+            cur.close()
+            conn.close()
+        # ========================================
+        
         # Формируем полный адрес для сообщения
         full_address = street_address
         details = []
