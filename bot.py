@@ -637,28 +637,36 @@ async def main(set_webhook=True):
     
     # ====== 👆 ВСТАВИЛИ, ЕДЕМ ДАЛЬШЕ ======
     
-    # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
+    # ========== ИСПРАВЛЕННЫЙ ПОРЯДОК ОБРАБОТЧИКОВ ==========
+    # Сначала добавляем команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rules", rules_command))
-    app.add_handler(welcome_handler)
-    app.add_handler(conv_handler)
-    app.add_handler(message_to_user_handler)
-    app.add_handler(favorite_handler)
-    app.add_handler(favorite_edit_handler)
-    app.add_handler(blacklist_handler)
-    app.add_handler(broadcast_handler)
-    app.add_handler(support_handler)
-    app.add_handler(price_edit_handler)
-    app.add_handler(working_hours_handler)
-    app.add_handler(admin_login_handler)  # ← ДОБАВЬ СЮДА
-    app.add_handler(dialog_reply_handler)
-    app.add_handler(messages_search_handler)
-    app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
-    app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
-    
-    # Добавляем команду отмены
     app.add_handler(CommandHandler('cancel', cancel_command))
+    
+    # Затем ConversationHandler'ы (от самых специфичных к общим)
+    app.add_handler(welcome_handler)           # /start приветствие
+    app.add_handler(conv_handler)              # основной процесс заказа
+    app.add_handler(message_to_user_handler)    # отправка сообщений
+    app.add_handler(favorite_handler)           # добавление в избранное
+    app.add_handler(favorite_edit_handler)      # редактирование избранного
+    app.add_handler(blacklist_handler)          # черный список
+    app.add_handler(broadcast_handler)          # рассылки
+    app.add_handler(support_handler)            # поддержка
+    app.add_handler(price_edit_handler)         # редактирование цен
+    app.add_handler(working_hours_handler)      # время работы
+    app.add_handler(admin_login_handler)        # вход в админку
+    app.add_handler(dialog_reply_handler)       # ответы в диалогах
+    app.add_handler(messages_search_handler)    # поиск сообщений
+    
+    # Потом конкретные CallbackQueryHandler'ы с pattern
+    app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
+    
+    # В КОНЦЕ - общий обработчик для всех остальных кнопок
+    app.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Обработчики сообщений
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
+    # =======================================================
     
     if set_webhook:
         # Режим polling (для локальной разработки)
