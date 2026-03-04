@@ -34,18 +34,47 @@ async def startup():
         
         logger.info("✅ Токен найден")
         
+        # Импортируем и запускаем бота
         from bot import main
+        logger.info("⏳ Вызов main(set_webhook=False)...")
         bot_app = await main(set_webhook=False)
+        logger.info(f"⏳ main() вернул: {bot_app}")
         
-        # Проверяем, что бот инициализирован
-        if bot_app and bot_app.bot:
+        # Подробная проверка бота
+        if bot_app is None:
+            logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: main() вернул None")
+            raise ValueError("main() returned None - бот не создан")
+        
+        logger.info(f"✅ Тип bot_app: {type(bot_app)}")
+        logger.info(f"✅ Атрибуты bot_app: {dir(bot_app)}")
+        
+        # Проверяем наличие bot
+        if not hasattr(bot_app, 'bot'):
+            logger.error("❌ У bot_app нет атрибута 'bot'")
+            raise ValueError("Bot application missing 'bot' attribute")
+        
+        if bot_app.bot is None:
+            logger.error("❌ bot_app.bot равен None")
+            raise ValueError("bot_app.bot is None")
+        
+        logger.info("✅ bot_app.bot существует, пробуем получить информацию...")
+        
+        # Пробуем получить информацию о боте
+        try:
             bot_info = await bot_app.bot.get_me()
-            logger.info(f"✅ Бот @{bot_info.username} инициализирован")
-        else:
-            logger.error("❌ Бот инициализирован некорректно")
+            logger.info(f"✅ Бот @{bot_info.username} успешно инициализирован")
+            logger.info(f"   ID: {bot_info.id}")
+            logger.info(f"   Имя: {bot_info.first_name}")
+        except Exception as e:
+            logger.error(f"❌ Не удалось получить информацию о боте: {e}")
+            logger.error("❌ Бот создан, но не отвечает на запросы")
+            raise
+        
+        logger.info("✅ Инициализация бота завершена успешно")
             
     except Exception as e:
         logger.error(f"❌ Ошибка инициализации бота: {e}", exc_info=True)
+        # Важно: перевыбрасываем исключение, чтобы Render понял, что запуск не удался
         raise
 
 async def telegram(request):
@@ -119,11 +148,18 @@ async def healthcheck(request):
     
     # Проверяем состояние бота
     if not bot_app:
+        logger.warning("⚠️ Healthcheck: бот не инициализирован")
         return PlainTextResponse("Bot not initialized", status_code=503)
     
     try:
+        # Проверяем наличие bot
+        if not hasattr(bot_app, 'bot') or not bot_app.bot:
+            logger.warning("⚠️ Healthcheck: bot_app.bot отсутствует")
+            return PlainTextResponse("Bot object missing", status_code=503)
+        
         # Проверяем подключение к Telegram API
         me = await bot_app.bot.get_me()
+        logger.info(f"✅ Healthcheck OK: @{me.username}")
         return PlainTextResponse(f"OK - Bot @{me.username} is running")
     except Exception as e:
         logger.error(f"❌ Healthcheck failed: {e}")
@@ -137,6 +173,11 @@ async def setup_webhook():
         return
     
     try:
+        # Проверяем наличие bot
+        if not hasattr(bot_app, 'bot') or not bot_app.bot:
+            logger.error("❌ Невозможно установить webhook: bot_app.bot отсутствует")
+            return
+        
         # Получаем URL из переменной окружения Render
         render_url = os.environ.get('RENDER_EXTERNAL_URL')
         if not render_url:
