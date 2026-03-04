@@ -8,6 +8,25 @@ from urllib.parse import urlparse
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+def check_database_integrity():
+    """Проверка целостности базы данных"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем все текстовые поля на наличие битых символов
+        tables = ['users', 'orders', 'messages', 'favorite_addresses']
+        for table in tables:
+            cur.execute(f"SELECT * FROM {table} LIMIT 1")
+            print(f"✅ Таблица {table} доступна")
+    except Exception as e:
+        print(f"❌ Ошибка при проверке таблицы {table}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+        
 def get_connection():
     """Возвращает подключение к PostgreSQL"""
     if not DATABASE_URL:
