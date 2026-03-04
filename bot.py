@@ -163,7 +163,36 @@ async def button_handler(update: Update, context):
             user_data[user_id] = {}
         user_data[user_id]['payment_method'] = payment_method
         
-        # Показываем подтверждение заказа
+        # ==== ПРОВЕРЯЕМ, ЕСТЬ ЛИ ВСЕ НЕОБХОДИМЫЕ ДАННЫЕ ====
+        # Если нет имени или телефона - запрашиваем их
+        if 'name' not in user_data[user_id] or 'phone' not in user_data[user_id]:
+            print(f"⚠️ Нет имени или телефона, запрашиваем...")
+            
+            # Получаем данные пользователя из базы
+            import database as db
+            user_info = db.get_user_by_id(user_id)
+            
+            if user_info and user_info[2]:  # если есть имя
+                user_data[user_id]['name'] = user_info[2]
+            if user_info and user_info[4]:  # если есть телефон
+                user_data[user_id]['phone'] = user_info[4]
+            
+            # Если всё ещё нет имени - запрашиваем
+            if 'name' not in user_data[user_id]:
+                await query.edit_message_text(
+                    "📝 Шаг 1: Введите ваше имя:",
+                    reply_markup=None
+                )
+                return NAME
+            
+            if 'phone' not in user_data[user_id]:
+                await query.edit_message_text(
+                    "📞 Шаг 2: Введите номер телефона:",
+                    reply_markup=None
+                )
+                return PHONE
+        
+        # Если все данные есть - показываем подтверждение
         from handlers.client import confirm_order_before_final
         await confirm_order_before_final(update, context)
         return CONFIRM_ORDER
