@@ -800,12 +800,6 @@ async def main(set_webhook=True):
     app.add_handler(CommandHandler("courier", courier_command_start))
     app.add_handler(CommandHandler("admin", admin_command_start))
 
-    # Русские команды
-    app.add_handler(CommandHandler("старт", start))
-    app.add_handler(CommandHandler("правила", rules_command))
-    app.add_handler(CommandHandler("курьер", courier_command_start))
-    app.add_handler(CommandHandler("админ", admin_command_start))
-
     # Команда отмены (оставляем как есть)
     app.add_handler(CommandHandler('cancel', cancel_command))
 
@@ -817,6 +811,34 @@ async def main(set_webhook=True):
     app.add_handler(CallbackQueryHandler(export_stats, pattern='^export_stats$'))
     app.add_handler(CallbackQueryHandler(export_blacklist, pattern='^export_blacklist$'))
     app.add_handler(CallbackQueryHandler(export_messages, pattern='^export_messages$'))
+    
+    # Добавить в bot.py (после других MessageHandler)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=1)
+
+async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает текстовые сообщения как команды"""
+    text = update.message.text.lower().strip()
+    
+    # Проверяем, не начинается ли с / (чтобы не конфликтовать с настоящими командами)
+    if text.startswith('/'):
+        return
+    
+    # Русские "команды" (просто текстовые триггеры)
+    if text == "старт" or text == "меню":
+        await start(update, context)
+    elif text == "админ" or text == "админка":
+        # Проверяем, админ ли пользователь
+        from config import admin_data
+        if update.effective_user.id in admin_data['admins']:
+            from handlers.admin import admin_panel_reply
+            await admin_panel_reply(update, context)
+        else:
+            await admin_command_start(update, context)
+    elif text == "курьер":
+        from handlers.courier_auth import courier_command_start
+        await courier_command_start(update, context)
+    elif text == "правила":
+        await rules_command(update, context)
 
     if set_webhook:
         # Режим polling (для локальной разработки)
