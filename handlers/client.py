@@ -729,6 +729,26 @@ async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = query.from_user.id
     
+    # Проверяем, есть ли данные пользователя
+    if user_id not in user_data:
+        await query.edit_message_text(
+            "❌ Сессия заказа истекла. Начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    # Проверяем, есть ли нужные поля
+    if 'order_date' not in user_data[user_id] or 'order_time' not in user_data[user_id]:
+        await query.edit_message_text(
+            "❌ Данные заказа повреждены. Начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
     # Возвращаемся к выбору времени
     await query.edit_message_text(
         f"🛍 Укажите количество пакетов (от 1 до 4, до 15 кг суммарно)\n"
