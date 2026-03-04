@@ -10,6 +10,185 @@ from urllib.parse import urlparse
 import random
 import string
 
+# =============== ФУНКЦИИ ДЛЯ КУРЬЕРОВ ===============
+
+def get_courier_active_orders():
+    """Получает активные заказы (new и confirmed) на сегодня и завтра"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
+        
+        cur.execute('''
+            SELECT order_id, user_id, client_name, phone, street_address, 
+                   entrance, floor, apartment, intercom, order_date, order_time, 
+                   bags_count, price, status, courier_id
+            FROM orders
+            WHERE status IN ('new', 'confirmed') 
+              AND order_date IN (%s, %s)
+            ORDER BY order_date, order_time
+        ''', (today, tomorrow))
+        
+        orders = cur.fetchall()
+        return orders
+    except Exception as e:
+        print(f"❌ Ошибка получения активных заказов: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def assign_courier_to_order(order_id, courier_id):
+    """Назначает курьера на заказ и меняет статус на confirmed"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE orders 
+            SET status = 'confirmed', courier_id = %s, taken_at = %s 
+            WHERE order_id = %s
+        ''', (courier_id, datetime.datetime.now(), order_id))
+        conn.commit()
+        print(f"✅ Курьер {courier_id} назначен на заказ #{order_id}")
+    except Exception as e:
+        print(f"❌ Ошибка назначения курьера: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_completed_orders(courier_id, limit=10):
+    """Получает историю выполненных заказов курьера"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT order_id, order_date, order_time, bags_count, price
+            FROM orders
+            WHERE status = 'completed' AND courier_id = %s
+            ORDER BY completed_at DESC
+            LIMIT %s
+        ''', (courier_id, limit))
+        orders = cur.fetchall()
+        return orders
+    except Exception as e:
+        print(f"❌ Ошибка получения истории: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_stats(courier_id):
+    """Общая статистика курьера"""
+    conn = get_connection()
+    if not conn:
+        return {'total': 0, 'bags': 0, 'earned': 0}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
+            FROM orders
+            WHERE status = 'completed' AND courier_id = %s
+        ''', (courier_id,))
+        total, bags, earned = cur.fetchone()
+        return {'total': total, 'bags': bags, 'earned': earned}
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики: {e}")
+        return {'total': 0, 'bags': 0, 'earned': 0}
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_daily_stats(courier_id, date):
+    """Статистика курьера за конкретный день"""
+    conn = get_connection()
+    if not conn:
+        return {'completed': 0, 'bags': 0, 'earned': 0}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
+            FROM orders
+            WHERE status = 'completed' 
+              AND courier_id = %s 
+              AND order_date = %s
+        ''', (courier_id, date))
+        completed, bags, earned = cur.fetchone()
+        return {'completed': completed, 'bags': bags, 'earned': earned}
+    except Exception as e:
+        print(f"❌ Ошибка получения дневной статистики: {e}")
+        return {'completed': 0, 'bags': 0, 'earned': 0}
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_stats_period(courier_id, start_date, end_date):
+    """Статистика за период"""
+    conn = get_connection()
+    if not conn:
+        return {'total': 0, 'bags': 0, 'earned': 0, 'avg': 0}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT COUNT(*), COALESCE(SUM(bags_count), 0), COALESCE(SUM(price), 0)
+            FROM orders
+            WHERE status = 'completed' 
+              AND courier_id = %s 
+              AND order_date BETWEEN %s AND %s
+        ''', (courier_id, start_date, end_date))
+        total, bags, earned = cur.fetchone()
+        avg = earned // total if total > 0 else 0
+        return {'total': total, 'bags': bags, 'earned': earned, 'avg': avg}
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики за период: {e}")
+        return {'total': 0, 'bags': 0, 'earned': 0, 'avg': 0}
+    finally:
+        cur.close()
+        conn.close()
+
+def get_courier_hourly_stats(courier_id):
+    """Статистика по часам (в какое время чаще берут заказы)"""
+    conn = get_connection()
+    if not conn:
+        return {}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT EXTRACT(HOUR FROM taken_at) as hour, COUNT(*)
+            FROM orders
+            WHERE status = 'completed' 
+              AND courier_id = %s 
+              AND taken_at IS NOT NULL
+            GROUP BY hour
+            ORDER BY hour
+        ''', (courier_id,))
+        
+        hourly = {}
+        for row in cur.fetchall():
+            hour = int(row[0])
+            count = row[1]
+            hourly[hour] = count
+        return hourly
+    except Exception as e:
+        print(f"❌ Ошибка получения почасовой статистики: {e}")
+        return {}
+    finally:
+        cur.close()
+        conn.close()
+
 def init_referral_tables():
     """Создаёт таблицы для реферальной системы"""
     conn = get_connection()
