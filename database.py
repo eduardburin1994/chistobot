@@ -48,7 +48,7 @@ def load_prices():
     """Загружает цены из БД"""
     conn = get_connection()
     if not conn:
-        return {'1': 100, '2': 140, '3+': 150}  # значения по умолчанию
+        return {'1': 100, '2': 140, '3+': 150}
     
     cur = conn.cursor()
     try:
@@ -59,7 +59,7 @@ def load_prices():
             return {
                 '1': result[0],
                 '2': result[1],
-                '3+': result[2]
+                '3+': result[2]  # ← ПРОВЕРЬ ЭТО ЗНАЧЕНИЕ
             }
         else:
             return {'1': 100, '2': 140, '3+': 150}
