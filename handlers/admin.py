@@ -1013,11 +1013,16 @@ async def admin_write_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return ConversationHandler.END
     
-    # Если просто вызвали команду (без ID)
+    # Если просто вызвали команду (без ID) - добавляем кнопку отмены
+    cancel_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("❌ Отмена", callback_data='admin')
+    ]])
+    
     await query.edit_message_text(
         "✏️ <b>Отправка сообщения клиенту</b>\n\n"
         "Введите ID пользователя, которому хотите написать:",
-        parse_mode='HTML'
+        parse_mode='HTML',
+        reply_markup=cancel_keyboard
     )
     return ENTER_USER_ID_FOR_MESSAGE
 
@@ -1054,18 +1059,27 @@ async def enter_user_id_for_message(update: Update, context: ContextTypes.DEFAUL
             )
             return SEND_MESSAGE_TO_USER
         else:
+            # Кнопка отмены при ошибке
+            cancel_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data='admin')
+            ]])
+            
             await update.message.reply_text(
                 "❌ Пользователь с таким ID не найден в базе.\n"
                 "Попробуйте другой ID:",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Отмена", callback_data='admin')
-                ]])
+                reply_markup=cancel_keyboard
             )
             return ENTER_USER_ID_FOR_MESSAGE
             
     except ValueError:
+        # Кнопка отмены при ошибке ввода
+        cancel_keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data='admin')
+        ]])
+        
         await update.message.reply_text(
-            "❌ Введите корректный ID (только цифры):"
+            "❌ Введите корректный ID (только цифры):",
+            reply_markup=cancel_keyboard
         )
         return ENTER_USER_ID_FOR_MESSAGE
 
