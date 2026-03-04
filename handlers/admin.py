@@ -504,12 +504,19 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     for i, b in enumerate(broadcasts[:10]):
         b_id, admin_id, msg, date, count = b
+        
+        # Преобразуем datetime в строку
+        if date:
+            date_str = date.strftime("%d.%m.%Y %H:%M")
+        else:
+            date_str = "неизвестно"
+        
         # Обрезаем длинное сообщение
         short_msg = msg[:50] + "..." if len(msg) > 50 else msg
-        text += f"<b>#{b_id}</b> от {date[:16]}\n"
+        
+        text += f"<b>#{b_id}</b> от {date_str}\n"
         text += f"📝 {short_msg}\n"
-        text += f"👥 Получателей: {count}\n"
-        text += f"🆔 Админ: {admin_id}\n\n"
+        text += f"👥 Получателей: {count}\n\n"
     
     if len(broadcasts) > 10:
         text += f"... и ещё {len(broadcasts) - 10} рассылок"
