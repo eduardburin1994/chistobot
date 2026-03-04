@@ -20,7 +20,7 @@ def get_courier_active_orders():
     
     cur = conn.cursor()
     try:
-        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        today = now = datetime.datetime.now() + datetime.timedelta(hours=3).strftime("%d.%m.%Y")
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
         
         cur.execute('''
@@ -54,7 +54,7 @@ def assign_courier_to_order(order_id, courier_id):
             UPDATE orders 
             SET status = 'confirmed', courier_id = %s, taken_at = %s 
             WHERE order_id = %s
-        ''', (courier_id, datetime.datetime.now(), order_id))
+        ''', (courier_id, dnow = datetime.datetime.now() + datetime.timedelta(hours=3), order_id))
         conn.commit()
         print(f"✅ Курьер {courier_id} назначен на заказ #{order_id}")
     except Exception as e:
@@ -357,7 +357,7 @@ def register_referral(referral_code, new_user_id):
             INSERT INTO referrals (referrer_id, referred_id, level, created_at)
             VALUES (%s, %s, 1, %s)
             RETURNING referral_id
-        ''', (referrer_id, new_user_id, datetime.datetime.now()))
+        ''', (referrer_id, new_user_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         
         referral_id = cur.fetchone()[0]
         
@@ -417,7 +417,7 @@ def process_referral_reward(referrer_id, friend_id, order_id):
         cur.execute('''
             INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
             VALUES (%s, 100, 'level1', %s, %s)
-        ''', (referrer_id, friend_id, datetime.datetime.now()))
+        ''', (referrer_id, friend_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         
         # Отмечаем реферала как награждённого
         cur.execute('''
@@ -446,7 +446,7 @@ def process_referral_reward(referrer_id, friend_id, order_id):
             cur.execute('''
                 INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
                 VALUES (%s, 30, 'level2', %s, %s)
-            ''', (level2_id, friend_id, datetime.datetime.now()))
+            ''', (level2_id, friend_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
             
             print(f"✅ Пользователь {level2_id} получил 30 баллов за реферала 2 уровня")
         
@@ -551,7 +551,7 @@ def use_balance_for_order(user_id, order_id, amount):
         cur.execute('''
             INSERT INTO referral_spendings (user_id, amount, order_id, created_at)
             VALUES (%s, %s, %s, %s)
-        ''', (user_id, amount, order_id, datetime.datetime.now()))
+        ''', (user_id, amount, order_id, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         
         conn.commit()
         return True
@@ -947,7 +947,7 @@ def is_slot_expired(slot_date, slot_time):
     - ИЛИ это прошедшая дата (вчера и раньше)
     """
     try:
-        now = datetime.datetime.now()
+        now = now = datetime.datetime.now() + datetime.timedelta(hours=3)
         today = now.strftime("%d.%m.%Y")
         
         # Парсим дату слота
@@ -1136,7 +1136,7 @@ def add_user(user_id, username, first_name, last_name):
             INSERT INTO users (user_id, username, first_name, last_name, registered_date)
             VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO NOTHING
-        ''', (user_id, username, first_name, last_name, datetime.datetime.now()))
+        ''', (user_id, username, first_name, last_name, datetime.datetime.now() + datetime.timedelta(hours=3)))
         conn.commit()
         print(f"✅ Пользователь {user_id} добавлен в БД")
     except Exception as e:
@@ -1318,7 +1318,7 @@ def save_favorite_address(user_id, address_name, street_address, entrance, floor
             (user_id, address_name, street_address, entrance, floor, apartment, intercom, created_date)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING address_id
-        ''', (user_id, address_name, street_address, entrance, floor, apartment, intercom, datetime.datetime.now()))
+        ''', (user_id, address_name, street_address, entrance, floor, apartment, intercom, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         address_id = cur.fetchone()[0]
         conn.commit()
         print(f"✅ Избранный адрес #{address_id} сохранён для пользователя {user_id}")
@@ -1453,7 +1453,7 @@ def create_order(user_id, client_name, phone, street_address, entrance, floor, a
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING order_id
         ''', (user_id, client_name, phone, street_address, entrance, floor, apartment, intercom, 
-              order_date, order_time, bags_count, price, payment_method, 'pending', datetime.datetime.now()))
+              order_date, order_time, bags_count, price, payment_method, 'pending', now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         
         order_id = cur.fetchone()[0]
         
@@ -1564,7 +1564,7 @@ def save_message(user_id, message_text):
             INSERT INTO messages (user_id, user_message, created_at, status)
             VALUES (%s, %s, %s, 'new')
             RETURNING message_id
-        ''', (user_id, message_text, datetime.datetime.now()))
+        ''', (user_id, message_text, now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         message_id = cur.fetchone()[0]
         conn.commit()
         print(f"✅ Сообщение #{message_id} сохранено от пользователя {user_id}")
@@ -1612,7 +1612,7 @@ def reply_to_message(message_id, reply_text):
             UPDATE messages 
             SET admin_reply = %s, status = 'replied', replied_at = %s
             WHERE message_id = %s
-        ''', (reply_text, datetime.datetime.now(), message_id))
+        ''', (reply_text, dnow = datetime.datetime.now() + datetime.timedelta(hours=3), message_id))
         conn.commit()
         print(f"✅ Ответ на сообщение #{message_id} сохранён")
     except Exception as e:
@@ -1636,7 +1636,7 @@ def add_to_blacklist(user_id, reason=""):
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE 
             SET reason = EXCLUDED.reason, added_date = EXCLUDED.added_date
-        ''', (user_id, reason, datetime.datetime.now(), 0))
+        ''', (user_id, reason, dnow = datetime.datetime.now() + datetime.timedelta(hours=3), 0))
         conn.commit()
         print(f"✅ Пользователь {user_id} добавлен в чёрный список")
     except Exception as e:
@@ -1717,7 +1717,7 @@ def save_broadcast(admin_id, message_text):
             INSERT INTO broadcasts (admin_id, message_text, sent_date, recipients_count)
             VALUES (%s, %s, %s, %s)
             RETURNING broadcast_id
-        ''', (admin_id, message_text, datetime.datetime.now(), 0))
+        ''', (admin_id, message_text, now = datetime.datetime.now() + datetime.timedelta(hours=3), 0))
         broadcast_id = cur.fetchone()[0]
         conn.commit()
         return broadcast_id
@@ -2006,7 +2006,7 @@ def save_admin_message(user_id, message_text):
             INSERT INTO messages (user_id, user_message, status, created_at)
             VALUES (%s, %s, 'replied', %s)
             RETURNING message_id
-        ''', (user_id, f"[ОТ АДМИНА] {message_text}", datetime.datetime.now()))
+        ''', (user_id, f"[ОТ АДМИНА] {message_text}", now = datetime.datetime.now() + datetime.timedelta(hours=3)))
         message_id = cur.fetchone()[0]
         conn.commit()
         print(f"✅ Ответ администратора #{message_id} сохранён")
