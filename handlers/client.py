@@ -716,12 +716,6 @@ async def use_bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from handlers.client import confirm_order_before_final
     await confirm_order_before_final(update, context)
     return CONFIRM_ORDER
-        
-    except Exception as e:
-        print(f"❌ Ошибка в payment_method_handler: {e}")
-        import traceback
-        traceback.print_exc()
-        return ConversationHandler.END
     
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к выбору времени"""
