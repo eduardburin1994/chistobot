@@ -716,11 +716,18 @@ async def use_bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     choice = query.data
     
+    from config import user_data
+    
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    
     if choice == 'use_bonus_yes':
         user_data[user_id]['use_bonus'] = True
     else:
         user_data[user_id]['use_bonus'] = False
     
+    # Переходим к подтверждению заказа
+    from handlers.client import confirm_order_before_final
     await confirm_order_before_final(update, context)
     return CONFIRM_ORDER
 

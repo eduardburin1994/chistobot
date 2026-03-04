@@ -37,7 +37,7 @@ from config import TOKEN, admin_data
 from constants import *
 from keyboards.client_keyboards import get_main_keyboard, create_date_keyboard, get_back_button
 from handlers.client import (
-    get_name, get_phone, get_intercom, date_callback, time_callback, get_bags, 
+    get_name, use_bonus_handler, get_phone, get_intercom, date_callback, time_callback, get_bags, 
     support_start, support_message, start_order, check_address_handler, 
     new_address, new_entrance, new_floor, new_apartment, new_intercom,
     my_orders_detail, order_detail_select, favorite_addresses_menu,
