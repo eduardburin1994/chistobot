@@ -2074,3 +2074,116 @@ def search_messages(search_text):
 if __name__ != '__main__':
     init_db()
     print("✅ База данных инициализирована при импорте")
+
+    # =============== ФУНКЦИИ ДЛЯ ПОЛНОГО УДАЛЕНИЯ КЛИЕНТА ===============
+
+def get_user_stats_for_deletion(user_id):
+    """
+    Возвращает статистику пользователя перед удалением
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        stats = {}
+        
+        # Информация о пользователе
+        cur.execute('SELECT first_name, username, phone FROM users WHERE user_id = %s', (user_id,))
+        user = cur.fetchone()
+        if user:
+            stats['name'] = user[0] or 'Не указано'
+            stats['username'] = user[1] or 'нет'
+            stats['phone'] = user[2] or 'нет'
+        else:
+            stats['name'] = 'Не найден'
+            stats['username'] = 'нет'
+            stats['phone'] = 'нет'
+        
+        # Количество заказов
+        cur.execute('SELECT COUNT(*) FROM orders WHERE user_id = %s', (user_id,))
+        stats['orders'] = cur.fetchone()[0]
+        
+        # Количество сообщений
+        cur.execute('SELECT COUNT(*) FROM messages WHERE user_id = %s', (user_id,))
+        stats['messages'] = cur.fetchone()[0]
+        
+        # Количество избранных адресов
+        cur.execute('SELECT COUNT(*) FROM favorite_addresses WHERE user_id = %s', (user_id,))
+        stats['favorites'] = cur.fetchone()[0]
+        
+        # Реферальные связи
+        cur.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id = %s', (user_id,))
+        stats['referrals_sent'] = cur.fetchone()[0]
+        
+        cur.execute('SELECT COUNT(*) FROM referrals WHERE referred_id = %s', (user_id,))
+        stats['referrals_received'] = cur.fetchone()[0]
+        
+        return stats
+        
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики пользователя {user_id}: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def delete_user_completely(user_id):
+    """
+    Полностью удаляет пользователя из базы данных
+    """
+    conn = get_connection()
+    if not conn:
+        print(f"❌ Не удалось подключиться к БД для удаления пользователя {user_id}")
+        return False
+    
+    cur = conn.cursor()
+    try:
+        print(f"🗑️ Начинаем полное удаление пользователя {user_id}...")
+        
+        # 1. Удаляем избранные адреса
+        cur.execute('DELETE FROM favorite_addresses WHERE user_id = %s', (user_id,))
+        
+        # 2. Удаляем сообщения
+        cur.execute('DELETE FROM messages WHERE user_id = %s', (user_id,))
+        
+        # 3. Получаем ID заказов пользователя для удаления слотов
+        cur.execute('SELECT order_id FROM orders WHERE user_id = %s', (user_id,))
+        orders = cur.fetchall()
+        
+        # 4. Удаляем занятые слоты для каждого заказа
+        for order in orders:
+            cur.execute('DELETE FROM busy_slots WHERE order_id = %s', (order[0],))
+        
+        # 5. Удаляем заказы
+        cur.execute('DELETE FROM orders WHERE user_id = %s', (user_id,))
+        
+        # 6. Удаляем реферальные связи
+        cur.execute('DELETE FROM referrals WHERE referrer_id = %s', (user_id,))
+        cur.execute('DELETE FROM referrals WHERE referred_id = %s', (user_id,))
+        
+        # 7. Удаляем начисления и траты баллов
+        cur.execute('DELETE FROM referral_earnings WHERE user_id = %s', (user_id,))
+        cur.execute('DELETE FROM referral_spendings WHERE user_id = %s', (user_id,))
+        
+        # 8. Удаляем самого пользователя
+        cur.execute('DELETE FROM users WHERE user_id = %s', (user_id,))
+        user_deleted = cur.rowcount
+        
+        if user_deleted > 0:
+            conn.commit()
+            print(f"✅ ПОЛНОЕ УДАЛЕНИЕ пользователя {user_id} завершено")
+            return True
+        else:
+            conn.rollback()
+            print(f"❌ Пользователь {user_id} не найден")
+            return False
+            
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Ошибка при удалении пользователя {user_id}: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()

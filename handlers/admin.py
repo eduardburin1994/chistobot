@@ -1528,26 +1528,10 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ЗАГОЛОВОК
     text = f"🔍 <b>{filter_name}</b> | {page+1}/{total_pages} | {total_orders} зак.\n\n"
     
-        # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ
+    # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ
     current_orders = []
     for i, order in enumerate(filtered_orders[start_idx:end_idx], 1):
-        # Безопасная распаковка через индексы
-        order_id = order[0]
-        user_id = order[1]
-        name = order[2]
-        phone = order[3]
-        street = order[4]
-        entrance = order[5] if len(order) > 5 else ''
-        floor = order[6] if len(order) > 6 else ''
-        apt = order[7] if len(order) > 7 else ''
-        intercom = order[8] if len(order) > 8 else ''
-        date = order[9] if len(order) > 9 else ''
-        time = order[10] if len(order) > 10 else ''
-        bags = order[11] if len(order) > 11 else 0
-        price = order[12] if len(order) > 12 else 0
-        status = order[13] if len(order) > 13 else 'unknown'
-        created = order[14] if len(order) > 14 else ''
-        
+        order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
         current_orders.append(order_id)
         
         status_emoji = {
@@ -1562,7 +1546,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if apt and apt not in ['0', '-']:
             short_address += f" кв.{apt}"
         
-        # Текст заказа
+        # Текст заказа (номер НЕ кликабельный в тексте)
         text += f"{status_emoji} #{order_id} {name[:15]} | {short_address} | {bags}меш | {price}₽\n"
         text += f"   📅 {date} {time} | 👤 ID{user_id}\n\n"
     
@@ -1769,7 +1753,9 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton("🔓 Разблокировать", callback_data=f'unblock_user_{user_id}')])
         else:
             keyboard.append([InlineKeyboardButton("🔒 Заблокировать", callback_data=f'block_user_{user_id}')])
-
+            
+            keyboard.append([InlineKeyboardButton("🗑️ ПОЛНОСТЬЮ УДАЛИТЬ", callback_data=f'delete_user_{user_id}')])
+        
         # Новая кнопка "Написать по ID"
         keyboard.append([InlineKeyboardButton("✏️ Написать по ID", callback_data=f'write_to_user_{user_id}')])
 
@@ -2249,3 +2235,93 @@ async def admin_orders_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         
         await update.message.reply_text(text, parse_mode='HTML')
+
+# =============== УДАЛЕНИЕ КЛИЕНТОВ ===============
+
+async def admin_delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало процесса удаления клиента"""
+    query = update.callback_query
+    await query.answer()
+    
+    from config import admin_data
+    
+    # Проверка прав доступа
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    user_id = int(query.data.replace('delete_user_', ''))
+    
+    # Получаем статистику пользователя
+    import database as db
+    stats = db.get_user_stats_for_deletion(user_id)
+    
+    if not stats:
+        await query.edit_message_text(
+            "❌ Не удалось получить информацию о пользователе",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='admin_clients')
+            ]])
+        )
+        return
+    
+    text = (
+        f"⚠️ <b>Удаление клиента</b>\n\n"
+        f"👤 <b>{stats['name']}</b>\n"
+        f"📱 Username: @{stats['username']}\n"
+        f"📞 Телефон: {stats['phone']}\n"
+        f"🆔 ID: <code>{user_id}</code>\n\n"
+        f"📊 <b>Будет удалено НАВСЕГДА:</b>\n"
+        f"• Заказов: {stats['orders']}\n"
+        f"• Сообщений: {stats['messages']}\n"
+        f"• Избранных адресов: {stats['favorites']}\n"
+        f"• Реферальных связей: {stats['referrals_sent'] + stats['referrals_received']}\n\n"
+        f"<b>❗️ Это действие необратимо!</b>"
+    )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да, удалить", callback_data=f'confirm_delete_user_{user_id}'),
+            InlineKeyboardButton("❌ Нет", callback_data='admin_clients')
+        ]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def admin_confirm_delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подтверждение и выполнение удаления клиента"""
+    query = update.callback_query
+    await query.answer()
+    
+    from config import admin_data
+    
+    # Проверка прав доступа
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    user_id = int(query.data.replace('confirm_delete_user_', ''))
+    
+    await query.edit_message_text(
+        f"⏳ Удаляю пользователя {user_id}...\nЭто может занять несколько секунд."
+    )
+    
+    import database as db
+    success = db.delete_user_completely(user_id)
+    
+    if success:
+        text = f"✅ <b>Пользователь {user_id} ПОЛНОСТЬЮ УДАЛЁН из базы данных</b>"
+    else:
+        text = f"❌ <b>Ошибка при удалении пользователя {user_id}</b>"
+    
+    keyboard = [[InlineKeyboardButton("◀️ К списку клиентов", callback_data='admin_clients')]]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )

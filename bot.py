@@ -54,7 +54,8 @@ from handlers.admin import (
     admin_write_to_user, enter_user_id_for_message, send_message_to_user,
     admin_orders_cleanup, process_orders_cleanup,
     blacklist_remove_user, blacklist_remove_process,
-    admin_referral_stats,
+    admin_referral_stats,admin_delete_user, 
+    admin_confirm_delete_user
     # Экспорт в Excel (закомментировано до добавления функций)
     # admin_export_menu, export_orders, export_orders_process,
     # export_clients, export_stats, export_blacklist, export_messages
@@ -761,6 +762,10 @@ async def main(set_webhook=True):
     app.add_handler(admin_login_handler)
     app.add_handler(dialog_reply_handler)
     app.add_handler(messages_search_handler)
+    
+    # Обработчики удаления клиентов
+    app.add_handler(CallbackQueryHandler(admin_delete_user, pattern='^delete_user_'))
+    app.add_handler(CallbackQueryHandler(admin_confirm_delete_user, pattern='^confirm_delete_user_'))
     
     # Обработчики кнопок с pattern
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
