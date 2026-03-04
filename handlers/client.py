@@ -827,172 +827,176 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         order_time = user_data[user_id]['order_time']
         bags = user_data[user_id]['bags_count']
         payment_method = user_data[user_id]['payment_method']
-    
-    # Рассчитываем цену
-    price = calculate_price(bags)
-    
-    # Проверяем, свободен ли слот
-    is_free = db.is_time_slot_free(order_date, order_time)
-    
-    if not is_free:
-        keyboard = create_date_keyboard()
-        await query.edit_message_text(
-            "❌ К сожалению, это время только что заняли.\n"
-            "Пожалуйста, выберите другую дату:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        
+        # Рассчитываем цену
+        price = calculate_price(bags)
+        
+        # Проверяем, свободен ли слот
+        is_free = db.is_time_slot_free(order_date, order_time)
+        
+        if not is_free:
+            keyboard = create_date_keyboard()
+            await query.edit_message_text(
+                "❌ К сожалению, это время только что заняли.\n"
+                "Пожалуйста, выберите другую дату:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            if user_id in user_data:
+                del user_data[user_id]
+            return DATE
+        
+        # Создаём заказ
+        result = db.create_order(
+            user_id=user_id,
+            client_name=name,
+            phone=phone,
+            street_address=street_address,
+            entrance=entrance,
+            floor=floor,
+            apartment=apartment,
+            intercom=intercom,
+            order_date=order_date,
+            order_time=order_time,
+            bags_count=bags,
+            price=price,
+            payment_method=payment_method
         )
+        
+        print(f"🔍 РЕЗУЛЬТАТ СОЗДАНИЯ ЗАКАЗА: {result}")
+        
+        if result[0] is False:
+            print(f"❌ ОШИБКА СОЗДАНИЯ ЗАКАЗА: {result[1]}")
+            await query.edit_message_text(
+                f"❌ {result[1]}\n\nПожалуйста, попробуйте ещё раз.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+                ]])
+            )
+            if user_id in user_data:
+                del user_data[user_id]
+            return ConversationHandler.END
+        
+        order_id = result[0]
+        
+        # Формируем полный адрес для сообщения
+        full_address = street_address
+        details = []
+        if entrance and entrance not in ['0', '-']:
+            details.append(f"под. {entrance}")
+        if floor and floor not in ['0', '-']:
+            details.append(f"эт. {floor}")
+        if apartment and apartment not in ['0', '-']:
+            details.append(f"кв. {apartment}")
+        if intercom and intercom not in ['0', '-']:
+            details.append(f"домофон {intercom}")
+        if details:
+            full_address += f" ({', '.join(details)})"
+        
+        # Текст о цене
+        if bags == 1:
+            price_text = f"💰 {price} ₽ (за 1 пакет)"
+        elif bags == 2:
+            price_text = f"💰 {price} ₽ (за 2 пакета)"
+        else:
+            price_text = f"💰 {price} ₽ (фиксированная цена за {bags} пакетов)"
+        
+        # Текст об оплате
+        payment_names = {
+            'cash': '💵 Наличные курьеру',
+            'card': '💳 Перевод на карту курьера',
+            'yookassa': '💰 Онлайн-оплата'
+        }
+        payment_text = f"💳 Оплата: {payment_names.get(payment_method, 'Неизвестно')}"
+        
+        from keyboards.client_keyboards import get_main_keyboard
+        is_admin = user_id in admin_data['admins']
+        
+        await query.edit_message_text(
+            f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
+            f"👤 {name}\n"
+            f"📞 {phone}\n"
+            f"📍 {full_address}\n"
+            f"📅 {order_date} {order_time}\n"
+            f"🛍 {bags} пакетов\n"
+            f"{price_text}\n"
+            f"{payment_text}\n\n"
+            f"🚶‍♂️ <b>Что дальше?</b>\n"
+            f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
+            f"Подтверждение заказа придёт отдельно.",
+            parse_mode='HTML',
+            reply_markup=get_main_keyboard(is_admin)
+        )
+        
+        # Уведомление админам
+        for admin_id in admin_data['admins']:
+            try:
+                # Получаем заказ для уведомления
+                order = db.get_order_by_id(order_id)
+                if order:
+                    # Формируем текст уведомления
+                    username = db.get_username_by_id(user_id)
+                    username_text = f" (@{username})" if username and username != "неизвестно" else ""
+                    
+                    # Формируем адрес
+                    full_address = street_address
+                    details = []
+                    if entrance and entrance not in ['0', '-']:
+                        details.append(f"под. {entrance}")
+                    if floor and floor not in ['0', '-']:
+                        details.append(f"эт. {floor}")
+                    if apartment and apartment not in ['0', '-']:
+                        details.append(f"кв. {apartment}")
+                    if intercom and intercom not in ['0', '-']:
+                        details.append(f"домофон {intercom}")
+                    if details:
+                        full_address += f" ({', '.join(details)})"
+                    
+                    text = (
+                        f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
+                        f"👤 {name}{username_text}\n"
+                        f"📞 {phone}\n"
+                        f"📍 {full_address}\n"
+                        f"📅 {order_date} {order_time}\n"
+                        f"🛍 {bags} пакетов\n"
+                        f"💰 {price} ₽\n"
+                    )
+                    
+                    # Кнопки для админа
+                    keyboard = []
+                    
+                    # Кнопка связи если есть username
+                    if username and username != "неизвестно":
+                        clean_username = username.replace('@', '')
+                        keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
+                    
+                    # Кнопки управления заказом
+                    keyboard.append([
+                        InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
+                        InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
+                        InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+                    ])
+                    
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=text,
+                        parse_mode='HTML',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    print(f"✅ Уведомление о заказе #{order_id} отправлено админу {admin_id}")
+            except Exception as e:
+                print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
+        
+        # Очищаем данные пользователя
         if user_id in user_data:
             del user_data[user_id]
-        return DATE
-    
-    # Создаём заказ
-    result = db.create_order(
-        user_id=user_id,
-        client_name=name,
-        phone=phone,
-        street_address=street_address,
-        entrance=entrance,
-        floor=floor,
-        apartment=apartment,
-        intercom=intercom,
-        order_date=order_date,
-        order_time=order_time,
-        bags_count=bags,
-        price=price,
-        payment_method=payment_method
-    )
-    
-    print(f"🔍 РЕЗУЛЬТАТ СОЗДАНИЯ ЗАКАЗА: {result}")  # ← ДОБАВЬТЕ
-    
-    if result[0] is False:
-        print(f"❌ ОШИБКА СОЗДАНИЯ ЗАКАЗА: {result[1]}")  # ← ДОБАВЬТЕ
-    
-    if result[0] is False:
-        await query.edit_message_text(
-            f"❌ {result[1]}\n\nПожалуйста, попробуйте ещё раз.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        if user_id in user_data:
-            del user_data[user_id]
+        
         return ConversationHandler.END
-    
-    order_id = result[0]
-    
-    # Формируем полный адрес для сообщения
-    full_address = street_address
-    details = []
-    if entrance and entrance not in ['0', '-']:
-        details.append(f"под. {entrance}")
-    if floor and floor not in ['0', '-']:
-        details.append(f"эт. {floor}")
-    if apartment and apartment not in ['0', '-']:
-        details.append(f"кв. {apartment}")
-    if intercom and intercom not in ['0', '-']:
-        details.append(f"домофон {intercom}")
-    if details:
-        full_address += f" ({', '.join(details)})"
-    
-    # Текст о цене
-    if bags == 1:
-        price_text = f"💰 {price} ₽ (за 1 пакет)"
-    elif bags == 2:
-        price_text = f"💰 {price} ₽ (за 2 пакета)"
-    else:
-        price_text = f"💰 {price} ₽ (фиксированная цена за {bags} пакетов)"
-    
-    # Текст об оплате
-    payment_names = {
-        'cash': '💵 Наличные курьеру',
-        'card': '💳 Перевод на карту курьера',
-        'yookassa': '💰 Онлайн-оплата'
-    }
-    payment_text = f"💳 Оплата: {payment_names.get(payment_method, 'Неизвестно')}"
-    
-    from keyboards.client_keyboards import get_main_keyboard
-    is_admin = user_id in admin_data['admins']
-    
-    await query.edit_message_text(
-        f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
-        f"👤 {name}\n"
-        f"📞 {phone}\n"
-        f"📍 {full_address}\n"
-        f"📅 {order_date} {order_time}\n"
-        f"🛍 {bags} пакетов\n"
-        f"{price_text}\n"
-        f"{payment_text}\n\n"
-        f"🚶‍♂️ <b>Что дальше?</b>\n"
-        f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
-        f"Подтверждение заказа придёт отдельно.",
-        parse_mode='HTML',
-        reply_markup=get_main_keyboard(is_admin)
-    )
-    
-    # Уведомление админам
-    for admin_id in admin_data['admins']:
-        try:
-            # Получаем заказ для уведомления
-            order = db.get_order_by_id(order_id)
-            if order:
-                # Формируем текст уведомления
-                username = db.get_username_by_id(user_id)
-                username_text = f" (@{username})" if username and username != "неизвестно" else ""
-                
-                # Формируем адрес
-                full_address = street_address
-                details = []
-                if entrance and entrance not in ['0', '-']:
-                    details.append(f"под. {entrance}")
-                if floor and floor not in ['0', '-']:
-                    details.append(f"эт. {floor}")
-                if apartment and apartment not in ['0', '-']:
-                    details.append(f"кв. {apartment}")
-                if intercom and intercom not in ['0', '-']:
-                    details.append(f"домофон {intercom}")
-                if details:
-                    full_address += f" ({', '.join(details)})"
-                
-                text = (
-                    f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
-                    f"👤 {name}{username_text}\n"
-                    f"📞 {phone}\n"
-                    f"📍 {full_address}\n"
-                    f"📅 {order_date} {order_time}\n"
-                    f"🛍 {bags} пакетов\n"
-                    f"💰 {price} ₽\n"
-                )
-                
-                # Кнопки для админа
-                keyboard = []
-                
-                # Кнопка связи если есть username
-                if username and username != "неизвестно":
-                    clean_username = username.replace('@', '')
-                    keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
-                
-                # Кнопки управления заказом
-                keyboard.append([
-                    InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
-                    InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
-                    InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
-                ])
-                
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=text,
-                    parse_mode='HTML',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                print(f"✅ Уведомление о заказе #{order_id} отправлено админу {admin_id}")
-        except Exception as e:
-            print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
-    
-    # Очищаем данные пользователя (ВНЕ ЦИКЛА!)
-    if user_id in user_data:
-        del user_data[user_id]
-    
-    return ConversationHandler.END  # ВНЕ ЦИКЛА!
+        
+    except Exception as e:
+        print(f"❌ Ошибка в final_confirm_order: {e}")
+        import traceback
+        traceback.print_exc()
+        return ConversationHandler.END
 
 async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
     """Переход к оплате после выбора количества мешков"""
