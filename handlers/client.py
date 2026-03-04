@@ -524,24 +524,46 @@ async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получаем имя клиента"""
     user_id = update.effective_user.id
+    print(f"🔥🔥🔥 get_name ВЫЗВАНА для пользователя {user_id}")
+    print(f"🔥 Текст сообщения: {update.message.text}")
+    
+    from config import user_data
+    
     if user_id not in user_data:
         user_data[user_id] = {}
+        print(f"🔥 Создана новая запись для {user_id}")
+    
     user_data[user_id]['name'] = update.message.text
+    print(f"🔥 Имя сохранено: {user_data[user_id]['name']}")
+    
     await update.message.reply_text("📞 Шаг 2: Введите номер телефона:")
+    print(f"🔥 Отправлен запрос телефона, возвращаю PHONE")
+    
+    from constants import PHONE
     return PHONE
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получаем телефон"""
     user_id = update.effective_user.id
+    print(f"📞📞📞 get_phone ВЫЗВАНА для пользователя {user_id}")
+    print(f"📞 Текст сообщения: {update.message.text}")
+    
+    from config import user_data
+    
     if user_id not in user_data:
         user_data[user_id] = {}
+        print(f"📞 Создана новая запись для {user_id}")
+    
     user_data[user_id]['phone'] = update.message.text
+    print(f"📞 Телефон сохранен: {user_data[user_id]['phone']}")
     
     # Сразу сохраняем телефон в базу
     import database as db
     db.update_user_phone(user_id, user_data[user_id]['phone'])
+    print(f"📞 Телефон сохранен в БД")
     
     # Переходим к выбору адреса
+    print(f"📞 Вызываю choose_address")
     return await choose_address(update, context)
 
 async def get_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
