@@ -21,33 +21,9 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_info:
         await query.edit_message_text("❌ Пользователь не найден")
         return
-        # ===== ВРЕМЕННАЯ ПРОВЕРКА =====
-    db.check_messages_exists(user_id)  # ← ВСТАВЬ СЮДА
-    # ================================
     
     # Получаем сообщения
     messages = db.get_dialog_messages(user_id, limit=15)
-    
-    # ========== ОТЛАДКА ==========
-    print(f"\n🔍🔍🔍 ДИАЛОГ С ПОЛЬЗОВАТЕЛЕМ {user_id} 🔍🔍🔍")
-    print(f"🔍 Тип messages: {type(messages)}")
-    print(f"🔍 Длина messages: {len(messages)}")
-    
-    for i, msg in enumerate(messages):
-        print(f"\n🔍 Сообщение #{i}:")
-        print(f"   Тип: {type(msg)}")
-        if hasattr(msg, '__len__'):
-            print(f"   Длина: {len(msg)}")
-        if isinstance(msg, (tuple, list)):
-            for j, val in enumerate(msg):
-                print(f"   [{j}] = {val} (тип: {type(val)})")
-        elif isinstance(msg, dict):
-            for key, val in msg.items():
-                print(f"   {key}: {val} (тип: {type(val)})")
-        else:
-            print(f"   Значение: {msg}")
-    print("🔍🔍🔍 КОНЕЦ ОТЛАДКИ 🔍🔍🔍\n")
-    # ==============================
     
     # Отмечаем все как прочитанные
     db.mark_dialog_as_read(user_id)
@@ -74,8 +50,34 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
     )
     
-    # ВРЕМЕННО: просто показываем количество сообщений
-    text += f"📊 Всего сообщений: {len(messages)}\n\n"
+    # Добавляем сообщения (последние 10)
+    if messages:
+        for msg in messages[:10]:
+            # msg уже словарь, полученный из get_dialog_messages
+            from_admin = msg.get('from_admin', False)
+            msg_text = msg.get('text', '')
+            msg_time = msg.get('time')
+            is_read = msg.get('is_read', False)
+            
+            # Форматируем время
+            if msg_time:
+                try:
+                    time_str = msg_time.strftime("%H:%M")
+                except:
+                    time_str = str(msg_time)
+            else:
+                time_str = ""
+            
+            if from_admin:
+                sender = "👤 Админ"
+                read_icon = "✓" if is_read else ""
+            else:
+                sender = "👤 Клиент"
+                read_icon = ""
+            
+            text += f"[{time_str}] {sender}:\n{msg_text} {read_icon}\n\n"
+    else:
+        text += "📭 Нет сообщений в этом диалоге\n\n"
     
     # Кнопки действий
     keyboard = [
