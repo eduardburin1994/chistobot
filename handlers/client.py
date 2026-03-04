@@ -517,7 +517,7 @@ async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')
         ]]),
-        parse_mode='HTML'А
+        parse_mode='HTML'
     )
     return NEW_ADDRESS
 
