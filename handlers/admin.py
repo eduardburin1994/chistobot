@@ -581,8 +581,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🧪 Тест", callback_data='toggle_test_mode')
         ],
         [
-            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export'),
-            InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')
+            InlineKeyboardButton("🎁 Рефералы", callback_data='admin_referral_stats'),  # ← НОВАЯ КНОПКА
+            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export')
         ],
         [
             InlineKeyboardButton("🚪 Выйти", callback_data='admin_logout'),  # ← НОВАЯ КНОПКА
