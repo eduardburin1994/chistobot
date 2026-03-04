@@ -2188,7 +2188,7 @@ def delete_user_completely(user_id):
         cur.close()
         conn.close()
 
-        def delete_user_completely(user_id):
+def delete_user_completely(user_id):
     """
     Полностью удаляет пользователя из базы данных
     """
