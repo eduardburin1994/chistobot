@@ -8,6 +8,43 @@ from urllib.parse import urlparse
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+def reset_messages_table():
+    """Удаляет и пересоздаёт таблицу messages"""
+    conn = get_connection()
+    if not conn:
+        print("❌ Нет подключения к БД")
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Удаляем существующую таблицу
+        cur.execute('DROP TABLE IF EXISTS messages CASCADE')
+        print("✅ Таблица messages удалена")
+        
+        # Создаём новую с правильной структурой
+        cur.execute('''
+            CREATE TABLE messages (
+                message_id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                user_message TEXT,
+                admin_reply TEXT,
+                status TEXT DEFAULT 'new',
+                is_important BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP,
+                replied_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        ''')
+        print("✅ Таблица messages создана заново")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Ошибка при сбросе таблицы: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+
 def check_database_integrity():
     """Проверка целостности базы данных"""
     conn = get_connection()
