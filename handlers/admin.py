@@ -1531,7 +1531,23 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # КОМПАКТНЫЙ СПИСОК ЗАКАЗОВ
     current_orders = []
     for i, order in enumerate(filtered_orders[start_idx:end_idx], 1):
-        order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+        # Безопасная распаковка через индексы
+        order_id = order[0]
+        user_id = order[1]
+        name = order[2] if len(order) > 2 else ''
+        phone = order[3] if len(order) > 3 else ''
+        street = order[4] if len(order) > 4 else ''
+        entrance = order[5] if len(order) > 5 else ''
+        floor = order[6] if len(order) > 6 else ''
+        apt = order[7] if len(order) > 7 else ''
+        intercom = order[8] if len(order) > 8 else ''
+        date = order[9] if len(order) > 9 else ''
+        time = order[10] if len(order) > 10 else ''
+        bags = order[11] if len(order) > 11 else 0
+        price = order[12] if len(order) > 12 else 0
+        status = order[13] if len(order) > 13 else 'unknown'
+        created = order[14] if len(order) > 14 else ''
+        
         current_orders.append(order_id)
         
         status_emoji = {
@@ -1546,7 +1562,7 @@ async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if apt and apt not in ['0', '-']:
             short_address += f" кв.{apt}"
         
-        # Текст заказа (номер НЕ кликабельный в тексте)
+        # Текст заказа
         text += f"{status_emoji} #{order_id} {name[:15]} | {short_address} | {bags}меш | {price}₽\n"
         text += f"   📅 {date} {time} | 👤 ID{user_id}\n\n"
     
