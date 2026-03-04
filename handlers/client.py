@@ -799,34 +799,34 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         user_id = query.from_user.id
         print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")
-    
-    # Проверяем, есть ли данные пользователя
-    if user_id not in user_data:
-        await query.edit_message_text(
-            "❌ Произошла ошибка. Начните заказ заново.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        return ConversationHandler.END
-    
-    from config import admin_data
-    from utils.helpers import calculate_price
-    import database as db
-    from handlers.admin import notify_admin
-    
-    # Получаем данные из user_data
-    name = user_data[user_id]['name']
-    phone = user_data[user_id]['phone']
-    street_address = user_data[user_id]['street_address']
-    entrance = user_data[user_id].get('entrance', '')
-    floor = user_data[user_id].get('floor', '')
-    apartment = user_data[user_id].get('apartment', '')
-    intercom = user_data[user_id].get('intercom', '')
-    order_date = user_data[user_id]['order_date']
-    order_time = user_data[user_id]['order_time']
-    bags = user_data[user_id]['bags_count']
-    payment_method = user_data[user_id]['payment_method']
+        
+        # Проверяем, есть ли данные пользователя
+        if user_id not in user_data:
+            await query.edit_message_text(
+                "❌ Произошла ошибка. Начните заказ заново.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+                ]])
+            )
+            return ConversationHandler.END
+        
+        from config import admin_data
+        from utils.helpers import calculate_price
+        import database as db
+        from handlers.admin import notify_admin
+        
+        # Получаем данные из user_data
+        name = user_data[user_id]['name']
+        phone = user_data[user_id]['phone']
+        street_address = user_data[user_id]['street_address']
+        entrance = user_data[user_id].get('entrance', '')
+        floor = user_data[user_id].get('floor', '')
+        apartment = user_data[user_id].get('apartment', '')
+        intercom = user_data[user_id].get('intercom', '')
+        order_date = user_data[user_id]['order_date']
+        order_time = user_data[user_id]['order_time']
+        bags = user_data[user_id]['bags_count']
+        payment_method = user_data[user_id]['payment_method']
     
     # Рассчитываем цену
     price = calculate_price(bags)
