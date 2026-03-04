@@ -376,4 +376,32 @@ async def courier_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат в главное меню курьера"""
     query = update.callback_query
     await query.answer()
-    await courier_main_menu(update, context)
+    
+    # Просто отправляем новое сообщение, а не редактируем старое
+    from keyboards.courier_keyboards import get_courier_main_keyboard
+    user = update.effective_user
+    
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    stats = db.get_courier_daily_stats(user.id, today)
+    
+    text = (
+        f"🚚 <b>Кабинет курьера</b>\n\n"
+        f"👤 {user.first_name}\n"
+        f"📅 {today}\n"
+        f"📊 Сегодня: {stats['completed']} заказов, {stats['bags']} мешков, {stats['earned']} ₽\n\n"
+        f"Выберите действие:"
+    )
+    
+    await query.message.reply_text(
+        text,
+        parse_mode='HTML',
+        reply_markup=get_courier_main_keyboard()
+    )
+    
+    # Удаляем старое сообщение, чтобы не захламлять чат
+    try:
+        await query.message.delete()
+    except:
+        pass
+    
+    return
