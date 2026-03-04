@@ -47,7 +47,7 @@ from handlers.admin import (
     admin_export, admin_settings,
     admin_write_to_user, enter_user_id_for_message, send_message_to_user,
     admin_orders_cleanup, process_orders_cleanup,
-    blacklist_remove_user, blacklist_remove_process
+    blacklist_remove_user, blacklist_remove_process,
     admin_referral_stats  # ← ДОБАВЬ ЭТУ СТРОКУ
 )
 from handlers.common import (
