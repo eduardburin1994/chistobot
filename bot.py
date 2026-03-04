@@ -260,6 +260,12 @@ async def button_handler(update: Update, context):
         await admin_panel(update, context)
         return ConversationHandler.END
     
+    # ===== ДОБАВЬ СЮДА =====
+    if query.data == 'admin_write_to_user':
+        await admin_write_to_user(update, context)
+        return ConversationHandler.END
+    # ========================
+    
     if query.data == 'admin_orders':
         await admin_orders(update, context)
         return ConversationHandler.END
