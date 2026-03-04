@@ -66,24 +66,27 @@ async def admin_dialog_send_reply(update: Update, context: ContextTypes.DEFAULT_
     
     return ConversationHandler.END
 
-async def admin_dialog_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Удаление диалога (помещение в корзину)"""
+async def admin_dialog_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подтверждение удаления диалога"""
     query = update.callback_query
     await query.answer()
     
-    user_id = int(query.data.replace('dialog_delete_', ''))
+    # Извлекаем ID пользователя из callback_data
+    data = query.data
+    user_id = int(data.replace('dialog_delete_confirm_', ''))
     
-    # Подтверждение удаления
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Да, удалить", callback_data=f'dialog_delete_confirm_{user_id}'),
-            InlineKeyboardButton("❌ Нет", callback_data=f'dialog_open_{user_id}')
-        ]
-    ]
+    # Реальное удаление сообщений из БД
+    import database as db
+    
+    # Помечаем все сообщения пользователя как удалённые
+    # (нужно добавить эту функцию в database.py)
+    db.delete_all_user_messages(user_id)
     
     await query.edit_message_text(
-        f"❓ Удалить все сообщения с пользователем ID {user_id}?",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "✅ Диалог удален",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ К диалогам", callback_data='admin_dialogs_all')
+        ]])
     )
 
 async def admin_dialog_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
