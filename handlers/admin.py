@@ -378,7 +378,12 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += "Последние рассылки:\n"
         for b in broadcasts[:3]:
             b_id, admin_id, msg, date, count = b
-            text += f"• {date[:10]}: {msg[:30]}... ({count} пол.)\n"
+            # Преобразуем datetime в строку
+            if date:
+                date_str = date.strftime("%d.%m.%Y")
+            else:
+                date_str = "неизвестно"
+            text += f"• {date_str}: {msg[:30]}... ({count} пол.)\n"
         text += "\n"
     
     text += "Выберите действие:"
