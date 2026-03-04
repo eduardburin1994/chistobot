@@ -98,6 +98,11 @@ async def button_handler(update: Update, context):
     if query.data == 'referral_info':
         await referral_info(update, context)
         return ConversationHandler.END
+
+    # Использование бонусов
+    if query.data in ['use_bonus_yes', 'use_bonus_no']:
+        await use_bonus_handler(update, context)
+        return USE_BONUS
     
     if query.data == 'referral_history':
         await referral_history(update, context)
