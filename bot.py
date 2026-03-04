@@ -58,7 +58,10 @@ from handlers.admin import (
     admin_write_to_user, enter_user_id_for_message, send_message_to_user,
     admin_orders_cleanup, process_orders_cleanup,
     blacklist_remove_user, blacklist_remove_process,
-    admin_referral_stats  # ← ДОБАВЬ ЭТУ СТРОКУ
+    admin_referral_stats,
+    # Добавляем функции экспорта
+    admin_export_menu, export_orders, export_orders_process,
+    export_clients, export_stats, export_blacklist, export_messages
 )
 from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
@@ -839,7 +842,7 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await courier_command_start(update, context)
     elif text == "правила":
         await rules_command(update, context)
-        
+
     # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
     from handlers.common import text_command_handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
