@@ -1069,7 +1069,7 @@ def get_dialog_messages(user_id, limit=20):
                 END as from_admin,
                 user_message,
                 created_at,
-                status = 'replied' as is_read
+                CASE WHEN status = 'replied' THEN TRUE ELSE FALSE END as is_read
             FROM messages 
             WHERE user_id = %s AND status != 'deleted'
             ORDER BY created_at DESC
@@ -1077,6 +1077,13 @@ def get_dialog_messages(user_id, limit=20):
         ''', (user_id, limit))
         
         messages = cur.fetchall()
+        print(f"🔍 get_dialog_messages для user {user_id}: нашел {len(messages)} сообщений")
+        
+        # Отладочный вывод первого сообщения
+        if messages:
+            print(f"🔍 Первое сообщение: {messages[0]}")
+            print(f"🔍 Длина кортежа: {len(messages[0])}")
+        
         return messages
     except Exception as e:
         print(f"❌ Ошибка получения диалога: {e}")
