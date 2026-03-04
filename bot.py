@@ -1,4 +1,5 @@
 # bot.py
+# bot.py
 import logging
 import asyncio
 import warnings
@@ -7,6 +8,10 @@ from handlers.referral.core import referral_info, referral_history
 from handlers.referral.stats import referral_top
 from handlers.admin_access import admin_command_start, admin_login_check, admin_logout
 from constants import ENTER_ADMIN_PASSWORD
+
+# 👇 ДОБАВЬ ЭТУ СТРОКУ 👇
+from handlers.courier_auth import courier_command_start, courier_login_check, courier_logout
+
 # Импорты для мини-мессенджера
 from handlers.messages.dialogs import admin_dialogs_list
 from handlers.messages.dialog import admin_dialog_open, admin_dialog_mark_read
