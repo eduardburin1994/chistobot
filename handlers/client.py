@@ -632,11 +632,11 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка выбора способа оплаты"""
     try:
-        query = update.callquery
+        query = update.callback_query  # ← ИСПРАВЛЕНО
         await query.answer()
         
         user_id = query.from_user.id
-        print(f"💳 payment_method_handler для пользователя {user_id}")
+        print(f"💳 payment_method_handler для пользователя {user_id}"
         
         if user_id not in user_data:
             user_data[user_id] = {}
