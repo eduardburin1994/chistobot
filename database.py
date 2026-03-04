@@ -1003,3 +1003,279 @@ def get_all_broadcasts():
 if __name__ != '__main__':
     init_db()
     print("✅ База данных инициализирована при импорте")
+# =============== НОВЫЕ ФУНКЦИИ ДЛЯ МИНИ-МЕССЕНДЖЕРА ===============
+
+def get_dialogs(filter_type='all'):
+    """
+    Получает список диалогов с последними сообщениями
+    filter_type: 'all', 'new', 'important', 'outbox'
+    """
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        # Получаем все диалоги с последним сообщением и количеством непрочитанных
+        query = '''
+            SELECT DISTINCT ON (m.user_id) 
+                m.user_id,
+                u.first_name,
+                u.username,
+                m.user_message as last_message,
+                m.created_at as last_time,
+                (SELECT COUNT(*) FROM messages WHERE user_id = m.user_id AND status = 'new') as unread_count,
+                CASE WHEN b.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_blocked
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            LEFT JOIN blacklist b ON m.user_id = b.user_id
+            WHERE m.status != 'deleted'
+        '''
+        
+        if filter_type == 'new':
+            query += ' AND (SELECT COUNT(*) FROM messages WHERE user_id = m.user_id AND status = \'new\') > 0'
+        elif filter_type == 'important':
+            query += ' AND m.is_important = TRUE'
+        elif filter_type == 'outbox':
+            query += " AND m.user_message LIKE '[ОТ АДМИНА]%'"
+        
+        query += ' ORDER BY m.user_id, m.created_at DESC'
+        
+        cur.execute(query)
+        dialogs = cur.fetchall()
+        return dialogs
+    except Exception as e:
+        print(f"❌ Ошибка получения диалогов: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_dialog_messages(user_id, limit=20):
+    """Получает историю сообщений с пользователем"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                message_id,
+                user_id,
+                CASE 
+                    WHEN user_message LIKE '[ОТ АДМИНА]%' THEN TRUE 
+                    ELSE FALSE 
+                END as from_admin,
+                user_message,
+                created_at,
+                status = 'replied' as is_read
+            FROM messages 
+            WHERE user_id = %s AND status != 'deleted'
+            ORDER BY created_at DESC
+            LIMIT %s
+        ''', (user_id, limit))
+        
+        messages = cur.fetchall()
+        return messages
+    except Exception as e:
+        print(f"❌ Ошибка получения диалога: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def mark_dialog_as_read(user_id):
+    """Отмечает все сообщения пользователя как прочитанные"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE messages 
+            SET status = 'replied' 
+            WHERE user_id = %s AND status = 'new'
+        ''', (user_id,))
+        conn.commit()
+        print(f"✅ Диалог с {user_id} отмечен как прочитанный")
+    except Exception as e:
+        print(f"❌ Ошибка отметки диалога: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def mark_message_as_read(message_id):
+    """Отмечает конкретное сообщение как прочитанное"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('UPDATE messages SET status = 'replied' WHERE message_id = %s', (message_id,))
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} отмечено как прочитанное")
+    except Exception as e:
+        print(f"❌ Ошибка отметки сообщения: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def delete_message(message_id, permanent=False):
+    """Удаляет сообщение (в корзину или навсегда)"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        if permanent:
+            cur.execute('DELETE FROM messages WHERE message_id = %s', (message_id,))
+        else:
+            cur.execute('UPDATE messages SET status = 'deleted' WHERE message_id = %s', (message_id,))
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} удалено")
+    except Exception as e:
+        print(f"❌ Ошибка удаления сообщения: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def restore_message(message_id):
+    """Восстанавливает сообщение из корзины"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('UPDATE messages SET status = 'new' WHERE message_id = %s', (message_id,))
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} восстановлено")
+    except Exception as e:
+        print(f"❌ Ошибка восстановления сообщения: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_deleted_messages():
+    """Получает сообщения в корзине"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                m.message_id,
+                m.user_id,
+                u.first_name,
+                m.user_message,
+                m.created_at
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            WHERE m.status = 'deleted'
+            ORDER BY m.created_at DESC
+            LIMIT 20
+        ''')
+        messages = cur.fetchall()
+        return messages
+    except Exception as e:
+        print(f"❌ Ошибка получения корзины: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def save_admin_message(user_id, message_text):
+    """Сохраняет ответ администратора"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO messages (user_id, user_message, status, created_at)
+            VALUES (%s, %s, 'replied', %s)
+            RETURNING message_id
+        ''', (user_id, f"[ОТ АДМИНА] {message_text}", datetime.datetime.now()))
+        message_id = cur.fetchone()[0]
+        conn.commit()
+        print(f"✅ Ответ администратора #{message_id} сохранён")
+        return message_id
+    except Exception as e:
+        print(f"❌ Ошибка сохранения ответа: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_total_unread_messages():
+    """Получает общее количество непрочитанных сообщений"""
+    conn = get_connection()
+    if not conn:
+        return 0
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT COUNT(*) FROM messages WHERE status = 'new'')
+        count = cur.fetchone()[0]
+        return count
+    except Exception as e:
+        print(f"❌ Ошибка подсчёта непрочитанных: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+def get_dialogs_count():
+    """Получает количество диалогов"""
+    conn = get_connection()
+    if not conn:
+        return 0
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT COUNT(DISTINCT user_id) FROM messages')
+        count = cur.fetchone()[0]
+        return count
+    except Exception as e:
+        print(f"❌ Ошибка подсчёта диалогов: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+def search_messages(search_text):
+    """Поиск сообщений по тексту"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                m.message_id,
+                m.user_id,
+                COALESCE(u.first_name, u.username, 'Пользователь') as user_name,
+                m.user_message,
+                m.created_at
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            WHERE m.user_message ILIKE %s AND m.status != 'deleted'
+            ORDER BY m.created_at DESC
+            LIMIT 20
+        ''', (f'%{search_text}%',))
+        messages = cur.fetchall()
+        return messages
+    except Exception as e:
+        print(f"❌ Ошибка поиска сообщений: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
