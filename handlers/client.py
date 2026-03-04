@@ -251,11 +251,12 @@ def get_bag_word(count):
         return "мешков"
 
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение нового адреса с проверкой района и защитой от повторного ввода"""
+    """Получение нового адреса с проверкой района"""
     user_id = update.effective_user.id
     address = update.message.text
     
     print(f"🏠 new_address: пользователь {user_id} вводит новый адрес: {address}")
+    print(f"📊 Результат проверки: {is_address_allowed(address)}")
     
     # Проверяем, не вводил ли пользователь уже адрес
     if user_id in user_data and user_data[user_id].get('address_confirmed', False):
