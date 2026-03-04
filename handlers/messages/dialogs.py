@@ -62,7 +62,14 @@ async def admin_dialogs_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Добавляем информацию о диалоге
         text += f"{status_emoji} <b>{display_name}</b>\n"
         text += f"   📝 {last_msg[:50]}...\n"
-        text += f"   🕒 {last_time[:16]} "
+        
+        # Преобразуем datetime в строку
+        if last_time:
+            time_str = last_time.strftime("%H:%M")
+        else:
+            time_str = ""
+            
+        text += f"   🕒 {time_str} "
         if unread > 0:
             text += f"• <b>{unread} новых</b>"
         text += "\n\n"
