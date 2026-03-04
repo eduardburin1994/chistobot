@@ -1114,7 +1114,7 @@ def mark_message_as_read(message_id):
     
     cur = conn.cursor()
     try:
-        cur.execute('UPDATE messages SET status = 'replied' WHERE message_id = %s', (message_id,))
+        cur.execute("UPDATE messages SET status = 'replied' WHERE message_id = %s", (message_id,))
         conn.commit()
         print(f"✅ Сообщение #{message_id} отмечено как прочитанное")
     except Exception as e:
@@ -1134,7 +1134,7 @@ def delete_message(message_id, permanent=False):
         if permanent:
             cur.execute('DELETE FROM messages WHERE message_id = %s', (message_id,))
         else:
-            cur.execute('UPDATE messages SET status = 'deleted' WHERE message_id = %s', (message_id,))
+            cur.execute("UPDATE messages SET status = 'deleted' WHERE message_id = %s', (message_id,))
         conn.commit()
         print(f"✅ Сообщение #{message_id} удалено")
     except Exception as e:
