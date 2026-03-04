@@ -8,6 +8,9 @@ import database as db
 # Токен бота - читаем из переменной окружения (ВАЖНО: имя должно совпадать с Render!)
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8730099509:AAF83M1EjAqwB7FErvaRXJUPKaP-1kREv8I')
 
+# Пароль для курьеров (можно вынести в переменные окружения)
+COURIER_PASSWORD = os.environ.get('COURIER_PASSWORD', 'courier123')
+
 # ID главного администратора
 MAIN_ADMIN_ID = 954653245
 
