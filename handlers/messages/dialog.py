@@ -25,6 +25,27 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Получаем сообщения
     messages = db.get_dialog_messages(user_id, limit=15)
     
+    # ========== ОТЛАДКА ==========
+    print(f"\n🔍🔍🔍 ДИАЛОГ С ПОЛЬЗОВАТЕЛЕМ {user_id} 🔍🔍🔍")
+    print(f"🔍 Тип messages: {type(messages)}")
+    print(f"🔍 Длина messages: {len(messages)}")
+    
+    for i, msg in enumerate(messages):
+        print(f"\n🔍 Сообщение #{i}:")
+        print(f"   Тип: {type(msg)}")
+        if hasattr(msg, '__len__'):
+            print(f"   Длина: {len(msg)}")
+        if isinstance(msg, (tuple, list)):
+            for j, val in enumerate(msg):
+                print(f"   [{j}] = {val} (тип: {type(val)})")
+        elif isinstance(msg, dict):
+            for key, val in msg.items():
+                print(f"   {key}: {val} (тип: {type(val)})")
+        else:
+            print(f"   Значение: {msg}")
+    print("🔍🔍🔍 КОНЕЦ ОТЛАДКИ 🔍🔍🔍\n")
+    # ==============================
+    
     # Отмечаем все как прочитанные
     db.mark_dialog_as_read(user_id)
     
@@ -50,47 +71,8 @@ async def admin_dialog_open(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
     )
     
-    # Добавляем сообщения (последние 10)
-    for msg in messages[:10]:
-        # Выводим отладку
-        print(f"🔍 Сообщение: {msg}, длина: {len(msg)}")
-        
-        # Определяем индексы в зависимости от длины кортежа
-        if len(msg) == 6:
-            # Формат: (message_id, user_id, from_admin, user_message, created_at, is_read)
-            msg_id = msg[0]
-            from_admin = msg[2]
-            msg_text = msg[3]
-            msg_time = msg[4]
-            is_read = msg[5]
-        elif len(msg) == 5:
-            # Другой возможный формат
-            msg_id = msg[0]
-            from_admin = msg[2] if len(msg) > 2 else False
-            msg_text = msg[3] if len(msg) > 3 else ""
-            msg_time = msg[4] if len(msg) > 4 else None
-            is_read = False
-        else:
-            # Если формат совсем другой, пропускаем
-            continue
-        
-        # Форматируем время
-        if msg_time:
-            try:
-                time_str = msg_time.strftime("%H:%M")
-            except:
-                time_str = str(msg_time)
-        else:
-            time_str = ""
-        
-        if from_admin:
-            sender = "👤 Админ"
-            read_icon = "✓" if is_read else ""
-        else:
-            sender = "👤 Клиент"
-            read_icon = ""
-        
-        text += f"[{time_str}] {sender}:\n{msg_text} {read_icon}\n\n"
+    # ВРЕМЕННО: просто показываем количество сообщений
+    text += f"📊 Всего сообщений: {len(messages)}\n\n"
     
     # Кнопки действий
     keyboard = [
