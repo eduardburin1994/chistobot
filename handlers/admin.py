@@ -1677,6 +1677,9 @@ async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if price_type:
             admin_data['prices'][price_type] = new_price
             
+            # Сохраняем в БД
+            db.save_prices(admin_data['prices'])
+            
             await update.message.reply_text(
                 f"✅ Цена успешно изменена!\n\n"
                 f"Новые цены:\n"
