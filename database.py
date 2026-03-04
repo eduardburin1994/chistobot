@@ -9,6 +9,26 @@ from urllib.parse import urlparse
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 
+def delete_all_user_messages(user_id):
+    """Помечает все сообщения пользователя как удалённые"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE messages SET status = 'deleted' WHERE user_id = %s",
+            (user_id,)
+        )
+        conn.commit()
+        print(f"✅ Все сообщения пользователя {user_id} помечены как удалённые")
+    except Exception as e:
+        print(f"❌ Ошибка удаления сообщений: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
 def check_messages_exists(user_id):
     """Проверяет, есть ли сообщения для пользователя"""
     conn = get_connection()
