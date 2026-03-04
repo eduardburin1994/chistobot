@@ -5,6 +5,384 @@ import psycopg2
 import psycopg2.extras
 from urllib.parse import urlparse
 
+# =============== РЕФЕРАЛЬНАЯ СИСТЕМА ===============
+
+import random
+import string
+
+def init_referral_tables():
+    """Создаёт таблицы для реферальной системы"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Добавляем поля в таблицу users
+        cur.execute('''
+            ALTER TABLE users 
+            ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS referred_by BIGINT,
+            ADD COLUMN IF NOT EXISTS referral_balance INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_earned INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS level1_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS level2_count INTEGER DEFAULT 0
+        ''')
+        
+        # Таблица реферальных связей
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS referrals (
+                referral_id SERIAL PRIMARY KEY,
+                referrer_id BIGINT,
+                referred_id BIGINT UNIQUE,
+                level INTEGER DEFAULT 1,
+                created_at TIMESTAMP,
+                first_order_id INTEGER,
+                rewarded BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (referrer_id) REFERENCES users (user_id),
+                FOREIGN KEY (referred_id) REFERENCES users (user_id),
+                FOREIGN KEY (first_order_id) REFERENCES orders (order_id)
+            )
+        ''')
+        
+        # Таблица начислений баллов
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS referral_earnings (
+                earning_id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                amount INTEGER,
+                source TEXT, -- 'level1', 'level2', 'bonus'
+                source_id INTEGER, -- ID реферала или заказа
+                created_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        ''')
+        
+        # Таблица использования баллов
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS referral_spendings (
+                spending_id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                amount INTEGER,
+                order_id INTEGER,
+                created_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id),
+                FOREIGN KEY (order_id) REFERENCES orders (order_id)
+            )
+        ''')
+        
+        conn.commit()
+        print("✅ Таблицы реферальной системы созданы")
+    except Exception as e:
+        print(f"❌ Ошибка создания таблиц рефералки: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def generate_referral_code(user_id):
+    """Генерирует уникальный реферальный код"""
+    # Формат: CHISTO + первые 4 буквы имени + случайные цифры
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Получаем имя пользователя
+        cur.execute('SELECT first_name FROM users WHERE user_id = %s', (user_id,))
+        user = cur.fetchone()
+        name_part = user[0][:4].upper() if user and user[0] else "USER"
+        
+        # Генерируем уникальный код
+        while True:
+            random_part = ''.join(random.choices(string.digits, k=4))
+            code = f"CHISTO{name_part}{random_part}"
+            
+            # Проверяем уникальность
+            cur.execute('SELECT user_id FROM users WHERE referral_code = %s', (code,))
+            if not cur.fetchone():
+                return code
+    except Exception as e:
+        print(f"❌ Ошибка генерации кода: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_or_create_referral_code(user_id):
+    """Получает существующий или создаёт новый реферальный код"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем, есть ли уже код
+        cur.execute('SELECT referral_code FROM users WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
+        
+        if result and result[0]:
+            return result[0]
+        
+        # Создаём новый код
+        code = generate_referral_code(user_id)
+        if code:
+            cur.execute(
+                'UPDATE users SET referral_code = %s WHERE user_id = %s',
+                (code, user_id)
+            )
+            conn.commit()
+            return code
+        return None
+    except Exception as e:
+        print(f"❌ Ошибка получения кода: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def register_referral(referral_code, new_user_id):
+    """Регистрирует нового пользователя по реферальному коду"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Находим, кто пригласил
+        cur.execute(
+            'SELECT user_id FROM users WHERE referral_code = %s',
+            (referral_code,)
+        )
+        referrer = cur.fetchone()
+        
+        if not referrer:
+            return None
+        
+        referrer_id = referrer[0]
+        
+        # Не даём регистрировать самого себя
+        if referrer_id == new_user_id:
+            return None
+        
+        # Проверяем, не зарегистрирован ли уже этот пользователь
+        cur.execute(
+            'SELECT * FROM referrals WHERE referred_id = %s',
+            (new_user_id,)
+        )
+        if cur.fetchone():
+            return None
+        
+        # Регистрируем реферала 1 уровня
+        cur.execute('''
+            INSERT INTO referrals (referrer_id, referred_id, level, created_at)
+            VALUES (%s, %s, 1, %s)
+            RETURNING referral_id
+        ''', (referrer_id, new_user_id, datetime.datetime.now()))
+        
+        referral_id = cur.fetchone()[0]
+        
+        # Обновляем счётчик у пригласившего
+        cur.execute('''
+            UPDATE users 
+            SET level1_count = level1_count + 1 
+            WHERE user_id = %s
+        ''', (referrer_id,))
+        
+        # Записываем, кто пригласил нового пользователя
+        cur.execute(
+            'UPDATE users SET referred_by = %s WHERE user_id = %s',
+            (referrer_id, new_user_id)
+        )
+        
+        conn.commit()
+        print(f"✅ Пользователь {new_user_id} пришёл по реферальному коду от {referrer_id}")
+        return referrer_id
+        
+    except Exception as e:
+        print(f"❌ Ошибка регистрации реферала: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def process_referral_reward(referrer_id, friend_id, order_id):
+    """Начисляет баллы за успешный заказ друга"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем, не начисляли ли уже баллы за этого друга
+        cur.execute('''
+            SELECT * FROM referrals 
+            WHERE referred_id = %s AND rewarded = TRUE
+        ''', (friend_id,))
+        
+        if cur.fetchone():
+            return
+        
+        # Начисляем баллы за реферала 1 уровня
+        cur.execute('''
+            UPDATE users 
+            SET referral_balance = referral_balance + 100,
+                total_earned = total_earned + 100
+            WHERE user_id = %s
+            RETURNING referral_balance
+        ''', (referrer_id,))
+        
+        new_balance = cur.fetchone()[0]
+        
+        # Записываем в историю начислений
+        cur.execute('''
+            INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
+            VALUES (%s, 100, 'level1', %s, %s)
+        ''', (referrer_id, friend_id, datetime.datetime.now()))
+        
+        # Отмечаем реферала как награждённого
+        cur.execute('''
+            UPDATE referrals 
+            SET rewarded = TRUE, first_order_id = %s 
+            WHERE referred_id = %s
+        ''', (order_id, friend_id))
+        
+        # Проверяем, не был ли пригласивший сам чьим-то рефералом (level 2)
+        cur.execute('SELECT referred_by FROM users WHERE user_id = %s', (referrer_id,))
+        level2_referrer = cur.fetchone()
+        
+        if level2_referrer and level2_referrer[0]:
+            level2_id = level2_referrer[0]
+            
+            # Начисляем баллы за реферала 2 уровня
+            cur.execute('''
+                UPDATE users 
+                SET referral_balance = referral_balance + 30,
+                    total_earned = total_earned + 30,
+                    level2_count = level2_count + 1
+                WHERE user_id = %s
+            ''', (level2_id,))
+            
+            # Записываем в историю
+            cur.execute('''
+                INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
+                VALUES (%s, 30, 'level2', %s, %s)
+            ''', (level2_id, friend_id, datetime.datetime.now()))
+            
+            print(f"✅ Пользователь {level2_id} получил 30 баллов за реферала 2 уровня")
+        
+        conn.commit()
+        print(f"✅ Пользователь {referrer_id} получил 100 баллов за реферала {friend_id}")
+        print(f"💰 Новый баланс: {new_balance} баллов")
+        
+    except Exception as e:
+        print(f"❌ Ошибка начисления баллов: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_referral_stats(user_id):
+    """Получает статистику реферальной программы для пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                referral_code,
+                referral_balance,
+                total_earned,
+                level1_count,
+                level2_count
+            FROM users WHERE user_id = %s
+        ''', (user_id,))
+        
+        user_stats = cur.fetchone()
+        if not user_stats:
+            return None
+        
+        # Получаем последних 5 рефералов
+        cur.execute('''
+            SELECT 
+                u.first_name,
+                u.username,
+                r.created_at,
+                r.rewarded
+            FROM referrals r
+            JOIN users u ON r.referred_id = u.user_id
+            WHERE r.referrer_id = %s
+            ORDER BY r.created_at DESC
+            LIMIT 5
+        ''', (user_id,))
+        
+        recent = cur.fetchall()
+        
+        # Получаем историю начислений
+        cur.execute('''
+            SELECT amount, source, created_at
+            FROM referral_earnings
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 10
+        ''', (user_id,))
+        
+        earnings = cur.fetchall()
+        
+        return {
+            'code': user_stats[0],
+            'balance': user_stats[1],
+            'total_earned': user_stats[2],
+            'level1': user_stats[3],
+            'level2': user_stats[4],
+            'recent': recent,
+            'earnings': earnings
+        }
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def use_balance_for_order(user_id, order_id, amount):
+    """Списывает баллы при оплате заказа"""
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем баланс
+        cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
+        balance = cur.fetchone()[0]
+        
+        if balance < amount:
+            return False
+        
+        # Списываем баллы
+        cur.execute('''
+            UPDATE users 
+            SET referral_balance = referral_balance - %s 
+            WHERE user_id = %s
+        ''', (amount, user_id))
+        
+        # Записываем трату
+        cur.execute('''
+            INSERT INTO referral_spendings (user_id, amount, order_id, created_at)
+            VALUES (%s, %s, %s, %s)
+        ''', (user_id, amount, order_id, datetime.datetime.now()))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка списания баллов: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
