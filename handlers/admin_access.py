@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import admin_data
 
 # Пароль для доступа к админке (можешь поменять)
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = "54admin54"
 
 # Состояние для ввода пароля (добавим в constants позже)
 ENTER_ADMIN_PASSWORD = 50
