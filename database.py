@@ -8,6 +8,37 @@ from urllib.parse import urlparse
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+def debug_messages_table():
+    """Выводит структуру таблицы messages"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Получаем список колонок
+        cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'messages' ORDER BY ordinal_position")
+        columns = cur.fetchall()
+        print("📋 СТРУКТУРА ТАБЛИЦЫ messages:")
+        for i, col in enumerate(columns):
+            print(f"   {i}: {col[0]} ({col[1]})")
+        
+        # Проверяем, есть ли данные
+        cur.execute("SELECT COUNT(*) FROM messages")
+        count = cur.fetchone()[0]
+        print(f"📊 Всего записей: {count}")
+        
+        if count > 0:
+            cur.execute("SELECT * FROM messages LIMIT 1")
+            sample = cur.fetchone()
+            print(f"🔍 Пример записи: {sample}")
+            print(f"🔍 Длина кортежа: {len(sample)}")
+    except Exception as e:
+        print(f"❌ Ошибка при отладке: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
 def reset_messages_table():
     """Удаляет и пересоздаёт таблицу messages"""
     conn = get_connection()
