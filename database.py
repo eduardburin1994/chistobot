@@ -582,16 +582,15 @@ def check_database_integrity():
         conn.close()
         
 def get_connection():
-    """Возвращает подключение к PostgreSQL"""
     if not DATABASE_URL:
-        print("❌ DATABASE_URL не найден в переменных окружения!")
+        print("❌ DATABASE_URL не найден!")
         return None
-    
     try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        # Добавьте таймаут и обработку ошибок
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=10)
         return conn
     except Exception as e:
-        print(f"❌ Ошибка подключения к БД: {e}")
+        print(f"❌ Ошибка подключения: {e}")
         return None
         
 def delete_order(order_id):
