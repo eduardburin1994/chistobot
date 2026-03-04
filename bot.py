@@ -92,7 +92,8 @@ async def button_handler(update: Update, context):
     if query.data.startswith('reopen_'):
         await reopen_order(update, context)
         return ConversationHandler.END
-        # Реферальная система
+        
+    # Реферальная система
     if query.data == 'referral_info':
         await referral_info(update, context)
         return ConversationHandler.END
@@ -104,7 +105,12 @@ async def button_handler(update: Update, context):
     if query.data == 'referral_top':
         await referral_top(update, context)
         return ConversationHandler.END
-    
+
+     # Реферальная статистика для админа
+    if query.data == 'admin_referral_stats':
+        await admin_referral_stats(update, context)
+        return ConversationHandler.END
+        
     if query.data == 'referral_help':
         # Показываем справку
         help_text = (
