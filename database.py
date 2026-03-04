@@ -8,6 +8,32 @@ from urllib.parse import urlparse
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+
+def check_messages_exists(user_id):
+    """Проверяет, есть ли сообщения для пользователя"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем все сообщения без условий
+        cur.execute("SELECT COUNT(*) FROM messages WHERE user_id = %s", (user_id,))
+        count = cur.fetchone()[0]
+        print(f"🔍 Всего сообщений для user {user_id}: {count}")
+        
+        if count > 0:
+            # Покажем первые несколько
+            cur.execute("SELECT * FROM messages WHERE user_id = %s LIMIT 3", (user_id,))
+            rows = cur.fetchall()
+            for row in rows:
+                print(f"🔍 Сообщение: {row}")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
 def debug_messages_table():
     """Выводит структуру таблицы messages"""
     conn = get_connection()
