@@ -13,13 +13,13 @@ async def admin_command_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обработчик команды /admin - начало входа"""
     user_id = update.effective_user.id
     
-    # Если уже админ - сразу показываем панель
+    # Если уже админ - показываем админ-панель через reply-версию
     if user_id in admin_data['admins']:
         from handlers.admin import admin_panel_reply
         await admin_panel_reply(update, context)
         return ConversationHandler.END
     
-    # Спрашиваем пароль
+    # Если не админ - спрашиваем пароль
     await update.message.reply_text(
         "🔐 <b>Вход в админ-панель</b>\n\n"
         "Введите пароль для доступа:",
