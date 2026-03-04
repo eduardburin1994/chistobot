@@ -2,6 +2,8 @@
 import logging
 import asyncio
 import warnings
+from handlers.admin_access import admin_command_start, admin_login_check, admin_logout
+from constants import ENTER_ADMIN_PASSWORD
 # Импорты для мини-мессенджера
 from handlers.messages.dialogs import admin_dialogs_list
 from handlers.messages.dialog import admin_dialog_open, admin_dialog_mark_read
@@ -74,6 +76,15 @@ async def button_handler(update: Update, context):
         await admin_order_detail(update, context)
         return ConversationHandler.END
 
+    # Кнопки админки
+    if query.data == 'admin':
+        await admin_panel(update, context)
+        return ConversationHandler.END
+    
+    if query.data == 'admin_logout':  # ← НОВАЯ КНОПКА
+        await admin_logout(update, context)
+        return ConversationHandler.END
+    
     # Возврат заказа в работу
     if query.data.startswith('reopen_'):
         await reopen_order(update, context)
@@ -457,6 +468,15 @@ async def main(set_webhook=True):
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
+
+    # ConversationHandler для входа в админку
+    admin_login_handler = ConversationHandler(
+        entry_points=[CommandHandler('admin', admin_command_start)],
+        states={
+            ENTER_ADMIN_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_login_check)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
     
     # ConversationHandler для избранных адресов (добавление)
     favorite_handler = ConversationHandler(
@@ -577,8 +597,9 @@ async def main(set_webhook=True):
     app.add_handler(support_handler)
     app.add_handler(price_edit_handler)
     app.add_handler(working_hours_handler)
-    app.add_handler(dialog_reply_handler)  # ← НОВЫЙ (добавь эту строку)
-    app.add_handler(messages_search_handler)  # ← НОВЫЙ (добавь эту строку)
+    app.add_handler(admin_login_handler)  # ← ДОБАВЬ СЮДА
+    app.add_handler(dialog_reply_handler)
+    app.add_handler(messages_search_handler)
     app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
