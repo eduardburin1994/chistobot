@@ -1675,20 +1675,24 @@ async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_type = context.user_data.get('editing_price')
         
         if price_type:
-    admin_data['prices'][price_type] = new_price
-    db.save_prices(admin_data['prices'])
-    
-    # ПОКАЗЫВАЕМ НОВЫЕ ЦЕНЫ
-    await update.message.reply_text(
-        f"✅ Цена успешно изменена!\n\n"
-        f"Новые цены:\n"
-        f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
-        f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
-        f"• 3+ пакетов: {admin_data['prices']['3+']} ₽",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ В админку", callback_data='admin')
-        ]])
-    )
+            admin_data['prices'][price_type] = new_price
+            
+            # Сохраняем в БД
+            db.save_prices(admin_data['prices'])
+            
+            await update.message.reply_text(
+                f"✅ Цена успешно изменена!\n\n"
+                f"Новые цены:\n"
+                f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
+                f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
+                f"• 3+ пакетов: {admin_data['prices']['3+']} ₽",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ В админку", callback_data='admin')
+                ]])
+            )
+        else:
+            await update.message.reply_text("❌ Не удалось определить тип цены")
+            
     except ValueError:
         await update.message.reply_text("❌ Введите число!")
         return 100  # EDITING_PRICE
