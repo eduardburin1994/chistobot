@@ -251,12 +251,24 @@ def get_bag_word(count):
         return "мешков"
 
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение нового адреса с проверкой района"""
+    """Получение нового адреса с проверкой района и наличия номера дома"""
     user_id = update.effective_user.id
     address = update.message.text
     
     print(f"🏠 new_address: пользователь {user_id} вводит новый адрес: {address}")
-    print(f"📊 Результат проверки: {is_address_allowed(address)}")
+    
+    # =============== ПРОВЕРКА НАЛИЧИЯ НОМЕРА ДОМА ===============
+    # Проверяем, есть ли в адресе цифры (номер дома)
+    import re
+    if not re.search(r'\d', address):
+        await update.message.reply_text(
+            "❌ <b>Укажите номер дома</b>\n\n"
+            "Пожалуйста, введите адрес вместе с номером дома.\n"
+            "Например: <i>Октябрьский проспект, д. 50</i> или <i>Левитана 23</i>",
+            parse_mode='HTML'
+        )
+        return NEW_ADDRESS  # Остаёмся в том же состоянии, просим ввести снова
+    # ============================================================
     
     # Проверяем, не вводил ли пользователь уже адрес
     if user_id in user_data and user_data[user_id].get('address_confirmed', False):
@@ -296,7 +308,7 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"⚠️ Создана новая запись для пользователя {user_id}")
     
     user_data[user_id]['street_address'] = address
-    user_data[user_id]['address_confirmed'] = True  # Помечаем, что адрес уже введён
+    user_data[user_id]['address_confirmed'] = True
     print(f"✅ Сохранён новый адрес: {user_data[user_id]['street_address']}")
     print(f"🔄 Переходим к состоянию NEW_ENTRANCE ({NEW_ENTRANCE})")
     
