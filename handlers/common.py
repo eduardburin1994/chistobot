@@ -9,7 +9,9 @@ import database as db
 from config import admin_data, user_data
 from keyboards.client_keyboards import get_main_keyboard
 from constants import WELCOME
+from utils.antiflood import antiflood, rate_limiter
 import logging
+
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -36,7 +38,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.add_user(user.id, user.username, user.first_name, user.last_name)
         print(f"✅ Новый пользователь {user.id} добавлен в базу")
         
-        # Для нового пользователя показываем специальное приветствие
         welcome_text = (
             f"👋 <b>Добро пожаловать в ЧистоBOT, {user.first_name}!</b>\n\n"
             f"🚶‍♂️ Я помогу вам быстро и удобно <b>избавиться от накопившегося мусора</b> в Твери.\n\n"
@@ -52,7 +53,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📝 <b>Нажмите кнопку ниже, чтобы начать работу:</b>"
         )
     else:
-        # Для существующего пользователя показываем обычное приветствие
         print(f"✅ Существующий пользователь {user.id} вернулся в бота")
         welcome_text = (
             f"👋 <b>С возвращением, {user.first_name}!</b>\n\n"
@@ -87,14 +87,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML'
     )
     
-    # ДОБАВЛЯЕМ ПОСТОЯННУЮ REPLY-КЛАВИАТУРУ (СТРЕЛОЧКА В КОНЦЕ)
-    #from keyboards.reply_keyboards import get_main_reply_keyboard
-    #is_admin = user.id in admin_data['admins']
-    #await update.message.reply_text(
-    #    "Меню быстрого доступа 👇",
-    #    reply_markup=get_main_reply_keyboard(is_admin)
-    #)
-    
     return WELCOME
 
 async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -128,7 +120,6 @@ async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "6️⃣ <b>Как это работает:</b> Курьер забирает пакеты прямо от вашей двери и самостоятельно утилизирует их в ближайшем баке."
     )
     
-    # Получаем клавиатуру главного меню (как после /start)
     from keyboards.client_keyboards import get_main_keyboard
     is_admin = user_id in admin_data['admins']
     keyboard = get_main_keyboard(is_admin)
@@ -138,16 +129,64 @@ async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
         reply_markup=keyboard
     )
+
+async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает текстовые сообщения как команды (русские аналоги)"""
+    user_id = update.effective_user.id
+    text = update.message.text.lower().strip()
+    
+    # Проверка на блокировку
+    if db.is_user_blacklisted(user_id):
+        await update.message.reply_text("⛔ Вы заблокированы в этом боте за нарушение правил.")
+        return
+    
+    # Проверка на спам
+    is_spam, reason, wait_time = antiflood.is_spam(user_id)
+    
+    if is_spam:
+        if reason == "BANNED":
+            await update.message.reply_text(
+                "🚫 Вы автоматически заблокированы за флуд.\n"
+                "Свяжитесь с администратором для разблокировки."
+            )
+        elif reason == "FLOOD":
+            minutes = wait_time // 60
+            await update.message.reply_text(
+                f"⚠️ <b>Слишком много сообщений!</b>\n\n"
+                f"Пожалуйста, подождите {minutes} минут перед отправкой следующего сообщения.\n"
+                f"Это защита от спама.",
+                parse_mode='HTML'
+            )
+        return
+    
+    # Обработка текстовых "команд"
+    if text in ["старт", "меню", "начать", "/старт"]:
+        await start(update, context)
+    elif text in ["правила", "помощь", "help", "/правила"]:
+        await rules_command(update, context)
+    elif text in ["админ", "админка", "/админ"]:
+        from handlers.admin_access import admin_command_start
+        await admin_command_start(update, context)
+    elif text in ["курьер", "/курьер"]:
+        from handlers.courier_auth import courier_command_start
+        await courier_command_start(update, context)
+    else:
+        # Если сообщение не похоже на команду - показываем меню
+        from keyboards.client_keyboards import get_main_keyboard
+        is_admin = user_id in admin_data['admins']
+        await update.message.reply_text(
+            "Используйте кнопки внизу экрана для навигации 👇",
+            reply_markup=get_main_keyboard(is_admin)
+        )
+
 async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа на приветствие"""
     query = update.callback_query
     await query.answer()
     
-    # В любом случае показываем главное меню
     user_id = query.from_user.id
     keyboard = get_main_keyboard(user_id in admin_data['admins'])
     
-    # Разный текст в зависимости от ответа
     if query.data == 'welcome_yes':
         text = "Отлично! 🎉 Давайте начнём. Выберите действие в меню:"
     else:
@@ -161,7 +200,6 @@ async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат в главное меню с показом REPLY-кнопок"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
         del context.bot_data['mock_callback_query']
@@ -170,14 +208,12 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
     
-    # Показываем inline-клавиатуру
     keyboard = get_main_keyboard(query.from_user.id in admin_data['admins'])
     await query.edit_message_text(
         "👋 Главное меню:",
         reply_markup=keyboard
     )
     
-    # Показываем REPLY-клавиатуру отдельным сообщением
     from keyboards.reply_keyboards import get_main_reply_keyboard
     is_admin = query.from_user.id in admin_data['admins']
     await query.message.reply_text(
@@ -187,8 +223,7 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать правила с информацией о зоне обслуживания"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    """Показать правила"""
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
         del context.bot_data['mock_callback_query']
@@ -199,19 +234,10 @@ async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     rules_text = (
         "📋 <b>Правила и условия:</b>\n\n"
-        "📍 <b>Зона обслуживания:</b>\n"
-        "Мы работаем ТОЛЬКО в Южном микрорайоне Твери на следующих улицах:\n"
-        "• Октябрьский проспект\n"
-        "• Улица Можайского\n"
-        "• Улица Королева\n"
-        "• Улица Левитана\n"
-        "• Бульвар Гусева\n"
-        "• Улица Псковская\n"
-        "• Улица С.Я. Лемешева\n\n"
         "1️⃣ <b>Вес:</b> Общий вес всех пакетов не более 15 кг.\n"
         "2️⃣ <b>Отмена:</b> Вы можете отменить заказ за 4 часа до прихода курьера.\n"
         "3️⃣ <b>Время работы:</b> Заявки принимаются с 10:00 до 22:00.\n"
-        "4️⃣ <b>Отказ:</b> При превышении веса или адресе вне зоны обслуживания курьер вправе отказаться от выноса.\n"
+        "4️⃣ <b>Отказ:</b> При превышении веса курьер вправе отказаться от выноса.\n"
         "5️⃣ <b>Что можно выносить:</b> Обычные бытовые отходы. Строительный мусор и опасные отходы не принимаются.\n"
         "6️⃣ <b>Как это работает:</b> Курьер забирает пакеты прямо от вашей двери и самостоятельно утилизирует их в ближайшем баке."
     )
@@ -226,8 +252,7 @@ async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать расценки с примечанием о зоне"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
+    """Показать расценки"""
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
         del context.bot_data['mock_callback_query']
@@ -261,40 +286,8 @@ async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ... (остальные функции, включая reply-версии, без изменений) ...
-async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать правила"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
-    if 'mock_callback_query' in context.bot_data:
-        query = context.bot_data['mock_callback_query']
-        del context.bot_data['mock_callback_query']
-    else:
-        query = update.callback_query
-    
-    await query.answer()
-    
-    rules_text = (
-        "📋 <b>Правила и условия:</b>\n\n"
-        "1️⃣ <b>Вес:</b> Общий вес всех пакетов не более 15 кг.\n"
-        "2️⃣ <b>Отмена:</b> Вы можете отменить заказ за 4 часа до прихода курьера.\n"
-        "3️⃣ <b>Время работы:</b> Заявки принимаются с 10:00 до 22:00.\n"
-        "4️⃣ <b>Отказ:</b> При превышении веса курьер вправе отказаться от выноса.\n"
-        "5️⃣ <b>Что можно выносить:</b> Обычные бытовые отходы. Строительный мусор и опасные отходы не принимаются.\n"
-        "6️⃣ <b>Как это работает:</b> Курьер забирает пакеты прямо от вашей двери и самостоятельно утилизирует их в ближайшем баке."
-    )
-    
-    keyboard = get_main_keyboard(query.from_user.id in admin_data['admins'])
-    
-    await query.edit_message_text(
-        rules_text,
-        parse_mode='HTML',
-        reply_markup=keyboard
-    )
-    return ConversationHandler.END
-
 async def show_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать контакты"""
-    # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
     if 'mock_callback_query' in context.bot_data:
         query = context.bot_data['mock_callback_query']
         del context.bot_data['mock_callback_query']
@@ -319,6 +312,7 @@ async def show_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return ConversationHandler.END
+
 async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик добавления бота в чат или группу"""
     if not update.message.new_chat_members:
@@ -326,11 +320,9 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
     
     for member in update.message.new_chat_members:
         if member.id == context.bot.id:
-            # Бота добавили в чат
             chat = update.effective_chat
             user = update.effective_user
             
-            # Определяем, кто добавил бота
             if user:
                 adder_name = user.first_name
                 if chat.type == 'private':
@@ -357,12 +349,11 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
             
             await update.message.reply_text(welcome_text, parse_mode='HTML')
             
-            # Добавляем пользователя в базу, если его там нет
             if user:
                 db.add_user(user.id, user.username, user.first_name, user.last_name)
                 print(f"✅ Пользователь {user.id} добавлен в базу через добавление бота")
             
-            break  # <--- Этот break должен быть здесь
+            break
 
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
@@ -417,15 +408,4 @@ async def show_contact_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         contact_text,
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик обычных текстовых сообщений"""
-    user_id = update.effective_user.id
-    text = update.message.text
-    
-    print(f"💬 Получено сообщение от {user_id}: {text}")
-    
-    await update.message.reply_text(
-        "Я не понимаю обычные сообщения. Используйте команды или кнопки в меню.\n"
-        "Например: /start, /prices, /rules"
     )

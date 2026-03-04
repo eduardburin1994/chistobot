@@ -65,6 +65,43 @@ def get_bag_word(count):
 # ======================================================
 
 async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало процесса заказа - выбор адреса"""
+    
+    # Определяем источник вызова
+    if update.callback_query:
+        user_id = update.callback_query.from_user.id
+        message = update.callback_query.message
+    else:
+        user_id = update.effective_user.id
+        message = update.message
+    
+    # ===== ЗАЩИТА ОТ СПАМА =====
+    from utils.antiflood import rate_limiter
+    
+    can_order, wait_time = rate_limiter.can_do_action(user_id, 'order')
+    
+    if not can_order:
+        minutes = wait_time // 60
+        warning_text = (
+            f"⏳ <b>Слишком частые заказы</b>\n\n"
+            f"Вы можете оформить новый заказ через {minutes} минут.\n"
+            f"Это защита от спама."
+        )
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                warning_text,
+                parse_mode='HTML'
+            )
+        else:
+            await update.message.reply_text(
+                warning_text,
+                parse_mode='HTML'
+            )
+        return ConversationHandler.END
+    # ===========================
+    
+    # ... остальной код функции (ничего не меняем) ...
     """Начало процесса заказа - выбор адреса (из избранного или новый)"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
     if 'mock_callback_query' in context.bot_data:

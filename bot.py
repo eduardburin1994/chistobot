@@ -839,6 +839,10 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await courier_command_start(update, context)
     elif text == "правила":
         await rules_command(update, context)
+        
+    # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
+    from handlers.common import text_command_handler
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
 
     if set_webhook:
         # Режим polling (для локальной разработки)
