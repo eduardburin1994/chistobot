@@ -517,7 +517,7 @@ async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')
         ]]),
-        parse_mode='HTML'
+        parse_mode='HTML'А
     )
     return NEW_ADDRESS
 
@@ -2048,29 +2048,49 @@ async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
 
-async def choose_address_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия choose_address для reply-кнопок"""
-    user_id = update.effective_user.id
+async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор адреса при заказе (из избранного или новый)"""
+    # Проверяем, откуда пришел вызов - из callback или из сообщения
+    if update.callback_query:
+        # Если из callback (обычный путь)
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+        message_func = query.edit_message_text
+        chat_id = query.message.chat_id
+    else:
+        # Если из сообщения (после ввода телефона)
+        user_id = update.effective_user.id
+        message_func = update.message.reply_text
+        chat_id = update.message.chat_id
     
     import database as db
+    
+    # Получаем избранные адреса пользователя
     favorites = db.get_user_favorite_addresses(user_id)
     
     text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
     
     keyboard = []
+    
+    # Добавляем кнопки с избранными адресами
     if favorites:
         for addr in favorites[:5]:
             addr_id, name, street, entrance, floor, apt, intercom, _ = addr
+            
+            # Формируем краткое описание адреса
             short_address = street
             if apt:
                 short_address += f", кв.{apt}"
+            
             button_text = f"{name} - {short_address}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
     
+    # Кнопка для нового адреса
     keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
     keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
     
-    await update.message.reply_text(
+    await message_func(
         text,
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
