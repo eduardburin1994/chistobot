@@ -403,6 +403,7 @@ async def main(set_webhook=True):
     # Явная инициализация базы данных
     import database as db
     db.init_db()
+    db.reset_messages_table()  # ← ВСТАВЬ СЮДА
     # ===== ДОБАВЬТЕ ЭТУ СТРОКУ =====
     db.check_database_integrity()  # Проверяем целостность БД
     # ================================
