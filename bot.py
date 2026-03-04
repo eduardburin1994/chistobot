@@ -2,6 +2,20 @@
 import logging
 import asyncio
 import warnings
+# Импорты для реферальной системы
+from handlers.referral.core import referral_info, referral_history
+from handlers.referral.stats import referral_top
+from handlers.admin_access import admin_command_start, admin_login_check, admin_logout
+from constants import ENTER_ADMIN_PASSWORD
+# Импорты для мини-мессенджера
+from handlers.messages.dialogs import admin_dialogs_list
+from handlers.messages.dialog import admin_dialog_open, admin_dialog_mark_read
+from handlers.messages.actions import (
+    admin_dialog_reply, admin_dialog_send_reply,
+    admin_dialog_delete, admin_dialog_delete_confirm,
+    admin_show_phone
+)
+from handlers.messages.search import admin_messages_search, admin_messages_search_results
 from handlers.client import bags_callback
 from keyboards.client_keyboards import get_bags_keyboard
 from handlers.admin import admin_order_detail, reopen_order
@@ -33,7 +47,8 @@ from handlers.admin import (
     admin_export, admin_settings,
     admin_write_to_user, enter_user_id_for_message, send_message_to_user,
     admin_orders_cleanup, process_orders_cleanup,
-    blacklist_remove_user, blacklist_remove_process
+    blacklist_remove_user, blacklist_remove_process,
+    admin_referral_stats  # ← ДОБАВЬ ЭТУ СТРОКУ
 )
 from handlers.common import (
     start, welcome_callback, back_to_menu, show_prices, show_rules, show_contact, 
@@ -60,14 +75,196 @@ async def button_handler(update: Update, context):
         await query.edit_message_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
 
-    # Детали заказа
+    # ========== 1. ОБРАБОТКА ДАТ ==========
+    if query.data.startswith('date_'):
+        print(f"🔥🔥🔥 ОБРАБОТКА ДАТЫ В button_handler: {query.data}")
+        
+        selected_date = query.data.replace('date_', '')
+        print(f"📅 Выбрана дата: {selected_date}")
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['order_date'] = selected_date
+        
+        import database as db
+        available_slots, slot_info = db.get_available_slots(selected_date)
+        
+        print(f"📅 Доступные слоты: {available_slots}")
+        
+        if not available_slots:
+            from keyboards.client_keyboards import create_date_keyboard
+            keyboard = create_date_keyboard()
+            await query.edit_message_text(
+                f"❌ На {selected_date} нет свободных слотов.\n"
+                f"Пожалуйста, выберите другую дату:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return DATE
+        
+        time_keyboard = []
+        for slot in available_slots:
+            time_keyboard.append([InlineKeyboardButton(slot, callback_data=f'time_{slot}')])
+        
+        await query.edit_message_text(
+            f"📅 Дата: {selected_date}\n\n"
+            f"⏰ Выберите удобное время:",
+            reply_markup=InlineKeyboardMarkup(time_keyboard)
+        )
+        return TIME
+
+    # ========== 2. ОБРАБОТКА ВРЕМЕНИ ==========
+    if query.data.startswith('time_'):
+        print(f"⏰ ОБРАБОТКА ВРЕМЕНИ В button_handler: {query.data}")
+        
+        selected_time = query.data.replace('time_', '')
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['order_time'] = selected_time
+        
+        from keyboards.client_keyboards import get_bags_keyboard
+        await query.edit_message_text(
+            f"📅 {user_data[user_id]['order_date']} {selected_time}\n\n"
+            f"🛍 Шаг 3: Сколько мешков нужно вынести?",
+            reply_markup=get_bags_keyboard()
+        )
+        return BAGS
+
+    # ========== 3. ОБРАБОТКА КОЛИЧЕСТВА МЕШКОВ ==========
+    if query.data.startswith('bags_'):
+        print(f"🛍 ОБРАБОТКА МЕШКОВ В button_handler: {query.data}")
+        
+        bags_count = int(query.data.replace('bags_', ''))
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['bags_count'] = bags_count
+        
+        from keyboards.client_keyboards import get_payment_keyboard
+        await query.edit_message_text(
+            f"🛍 Выбрано: <b>{bags_count} мешков</b>\n\n"
+            f"💳 Шаг 4: Выберите способ оплаты",
+            parse_mode='HTML',
+            reply_markup=get_payment_keyboard()
+        )
+        return PAYMENT_METHOD
+
+    # ========== 4. ОБРАБОТКА ОПЛАТЫ ==========
+    if query.data.startswith('pay_'):
+        print(f"💳 ОБРАБОТКА ОПЛАТЫ В button_handler: {query.data}")
+        
+        payment_method = query.data.replace('pay_', '')
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['payment_method'] = payment_method
+        
+        # ==== ПРОВЕРЯЕМ, ЕСТЬ ЛИ ВСЕ НЕОБХОДИМЫЕ ДАННЫЕ ====
+        # Если нет имени или телефона - запрашиваем их
+        if 'name' not in user_data[user_id] or 'phone' not in user_data[user_id]:
+            print(f"⚠️ Нет имени или телефона, запрашиваем...")
+            
+            # Получаем данные пользователя из базы
+            import database as db
+            user_info = db.get_user_by_id(user_id)
+            
+            if user_info and user_info[2]:  # если есть имя
+                user_data[user_id]['name'] = user_info[2]
+            if user_info and user_info[4]:  # если есть телефон
+                user_data[user_id]['phone'] = user_info[4]
+            
+            # Если всё ещё нет имени - запрашиваем
+            if 'name' not in user_data[user_id]:
+                await query.edit_message_text(
+                    "📝 Шаг 1: Введите ваше имя:",
+                    reply_markup=None
+                )
+                return NAME
+            
+            if 'phone' not in user_data[user_id]:
+                await query.edit_message_text(
+                    "📞 Шаг 2: Введите номер телефона:",
+                    reply_markup=None
+                )
+                return PHONE
+        
+        # Если все данные есть - показываем подтверждение
+        from handlers.client import confirm_order_before_final
+        await confirm_order_before_final(update, context)
+        return CONFIRM_ORDER
+
+    # ========== 5. ПОДТВЕРЖДЕНИЕ ЗАКАЗА ==========
+    if query.data == 'final_confirm':
+        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")
+        from handlers.client import final_confirm_order
+        await final_confirm_order(update, context)
+        return ConversationHandler.END
+
+    # ========== 6. ВСЕ ОСТАЛЬНЫЕ ВАШИ КНОПКИ ==========
+    # (весь ваш существующий код с кнопками)
+
+    # Сначала обрабатываем точное совпадение
+    if query.data == 'order_detail_select':
+        await order_detail_select(update, context)
+        return ConversationHandler.END
+
+    # Кнопки админки
+    if query.data == 'admin':
+        await admin_panel(update, context)
+        return ConversationHandler.END
+    
+    if query.data == 'admin_logout':
+        await admin_logout(update, context)
+        return ConversationHandler.END
+    
+    # Потом обрабатываем все, что начинается с order_detail_
     if query.data.startswith('order_detail_'):
         await admin_order_detail(update, context)
         return ConversationHandler.END
+        
+    # Реферальная система
+    if query.data == 'referral_info':
+        await referral_info(update, context)
+        return ConversationHandler.END
 
-    # Возврат заказа в работу
-    if query.data.startswith('reopen_'):
-        await reopen_order(update, context)
+    if query.data in ['use_bonus_yes', 'use_bonus_no']:
+        await use_bonus_handler(update, context)
+        return USE_BONUS
+    
+    if query.data == 'referral_history':
+        await referral_history(update, context)
+        return ConversationHandler.END
+    
+    if query.data == 'referral_top':
+        await referral_top(update, context)
+        return ConversationHandler.END
+
+    if query.data == 'admin_referral_stats':
+        await admin_referral_stats(update, context)
+        return ConversationHandler.END
+        
+    if query.data == 'referral_help':
+        help_text = (
+            "❓ <b>Как работает реферальная программа?</b>\n\n"
+            "1️⃣ <b>Получи ссылку</b> в разделе 'Приведи друга'\n"
+            "2️⃣ <b>Отправь друзьям</b>\n"
+            "3️⃣ Когда друг сделает первый заказ — ты получишь <b>100 баллов</b>\n"
+            "4️⃣ Если друг тоже пригласит кого-то — ты получишь <b>30 баллов</b> за реферала 2 уровня\n"
+            "5️⃣ <b>300 баллов = бесплатный вывоз</b>\n"
+            "6️⃣ Баллы можно использовать как скидку при заказе\n\n"
+            "💡 <b>Совет:</b> Чем больше друзей, тем больше баллов!"
+        )
+        await query.edit_message_text(
+            help_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='referral_info')
+            ]])
+        )
         return ConversationHandler.END
 
     # Повтор заказа
@@ -76,12 +273,11 @@ async def button_handler(update: Update, context):
         await repeat_order(update, context)
         return ConversationHandler.END
 
-    #    # ===== ИЗМЕНЕНИЕ АДРЕСА =====
+    # Изменение адреса
     if query.data == 'change_address':
         user_id = query.from_user.id
         print(f"🔄 Пользователь {user_id} изменяет адрес")
         
-        # Очищаем данные адреса, но оставляем имя и телефон
         if user_id in user_data:
             user_data[user_id].pop('street_address', None)
             user_data[user_id].pop('entrance', None)
@@ -93,15 +289,6 @@ async def button_handler(update: Update, context):
         from handlers.client import choose_address
         await choose_address(update, context)
         return SELECT_ADDRESS
-    # =============================
-    # ===============================
-
-    # Подтверждение заказа
-    if query.data == 'final_confirm':
-        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")
-        from handlers.client import final_confirm_order
-        await final_confirm_order(update, context)
-        return ConversationHandler.END
     
     # Обработка кнопок приветствия
     if query.data in ['welcome_yes', 'welcome_no']:
@@ -169,10 +356,6 @@ async def button_handler(update: Update, context):
         await order_detail_select(update, context)
         return ConversationHandler.END
     
-    if query.data.startswith('order_detail_'):
-        await order_detail(update, context)
-        return ConversationHandler.END
-    
     # Кнопки избранных адресов
     if query.data == 'favorite_menu':
         await favorite_addresses_menu(update, context)
@@ -227,24 +410,24 @@ async def button_handler(update: Update, context):
         await new_address_start(update, context)
         return ConversationHandler.END
     
-    # Кнопки оплаты
+    # Кнопки оплаты (уже обработаны выше, но оставляем для совместимости)
     if query.data in ['pay_cash', 'pay_card', 'pay_yookassa']:
-        return await payment_method_handler(update, context)
+        # Уже обработано выше, но если сюда попало - игнорируем
+        return ConversationHandler.END
     
     if query.data == 'back_to_bags':
         await back_to_bags(update, context)
         return ConversationHandler.END
     
     # Кнопки админки
-    if query.data == 'admin':
-        await admin_panel(update, context)
+    if query.data == 'admin_write_to_user':
+        await admin_write_to_user(update, context)
         return ConversationHandler.END
     
     if query.data == 'admin_orders':
         await admin_orders(update, context)
         return ConversationHandler.END
     
-    # НОВЫЕ КНОПКИ ДЛЯ ЗАКАЗОВ (пагинация, фильтры, очистка)
     if query.data.startswith('orders_page_') or query.data.startswith('orders_filter_'):
         await admin_orders(update, context)
         return ConversationHandler.END
@@ -281,7 +464,6 @@ async def button_handler(update: Update, context):
         await blacklist_add_user(update, context)
         return ConversationHandler.END
     
-    # НОВАЯ КНОПКА: Удаление из черного списка
     if query.data == 'blacklist_remove_user':
         await blacklist_remove_user(update, context)
         return ConversationHandler.END
@@ -326,6 +508,49 @@ async def button_handler(update: Update, context):
         await toggle_test_mode(update, context)
         return ConversationHandler.END
     
+    # ============= МИНИ-МЕССЕНДЖЕР =============
+    if query.data.startswith('admin_dialogs_'):
+        await admin_dialogs_list(update, context)
+        return ConversationHandler.END
+    
+    if query.data.startswith('dialog_open_'):
+        await admin_dialog_open(update, context)
+        return DIALOG_VIEW
+    
+    if query.data.startswith('dialog_reply_'):
+        await admin_dialog_reply(update, context)
+        return DIALOG_REPLY
+    
+    if query.data.startswith('dialog_mark_read_'):
+        await admin_dialog_mark_read(update, context)
+        return DIALOG_VIEW
+    
+    if query.data.startswith('dialog_delete_confirm_'):
+        await admin_dialog_delete_confirm(update, context)
+        return DIALOG_VIEW
+    
+    if query.data.startswith('dialog_delete_'):
+        await admin_dialog_delete(update, context)
+        return DIALOG_VIEW
+    
+    if query.data.startswith('show_phone_'):
+        await admin_show_phone(update, context)
+        return DIALOG_VIEW
+    
+    if query.data == 'admin_messages_search':
+        await admin_messages_search(update, context)
+        return SEARCH_MESSAGES
+    
+    if query.data == 'admin_messages_trash':
+        await query.edit_message_text(
+            "🗑 <b>Корзина</b>\n\nФункция в разработке",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='admin_messages')
+            ]])
+        )
+        return ConversationHandler.END
+    
     # Обработка действий с заказами
     if query.data.startswith('complete_') or query.data.startswith('confirm_') or query.data.startswith('cancel_'):
         await handle_admin_actions(update, context)
@@ -342,6 +567,10 @@ async def main(set_webhook=True):
     # Явная инициализация базы данных
     import database as db
     db.init_db()
+    db.init_referral_tables()  # ← ДОБАВЬ ЭТУ СТРОКУ
+    # db.reset_messages_table()  # ← ЗАКОММЕНТИРОВАНО
+    db.debug_messages_table()
+    db.check_database_integrity()
     print("🚀 База данных проверена")
     
     # Создаем приложение
@@ -390,6 +619,15 @@ async def main(set_webhook=True):
         states={
             ENTER_USER_ID_FOR_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_user_id_for_message)],
             SEND_MESSAGE_TO_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, send_message_to_user)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+
+    # ConversationHandler для входа в админку
+    admin_login_handler = ConversationHandler(
+        entry_points=[CommandHandler('admin', admin_command_start)],
+        states={
+            ENTER_ADMIN_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_login_check)]
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
@@ -477,11 +715,31 @@ async def main(set_webhook=True):
         },
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
+    # ====== 👇 ВОТ СЮДА ВСТАВЛЯЕМ НОВЫЕ ОБРАБОТЧИКИ ======
+    
+    # ConversationHandler для ответов в диалогах (НОВЫЙ)
+    dialog_reply_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_dialog_reply, pattern='^dialog_reply_')],
+        states={
+            DIALOG_REPLY: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_dialog_send_reply)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ConversationHandler для поиска сообщений (НОВЫЙ)
+    messages_search_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_messages_search, pattern='^admin_messages_search$')],
+        states={
+            SEARCH_MESSAGES: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_messages_search_results)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+    
+    # ====== 👆 ВСТАВИЛИ, ЕДЕМ ДАЛЬШЕ ======
     
     # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rules", rules_command))
-    app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(welcome_handler)
     app.add_handler(conv_handler)
     app.add_handler(message_to_user_handler)
@@ -492,6 +750,9 @@ async def main(set_webhook=True):
     app.add_handler(support_handler)
     app.add_handler(price_edit_handler)
     app.add_handler(working_hours_handler)
+    app.add_handler(admin_login_handler)  # ← ДОБАВЬ СЮДА
+    app.add_handler(dialog_reply_handler)
+    app.add_handler(messages_search_handler)
     app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))

@@ -1,12 +1,17 @@
 # handlers/client.py
-from constants import NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, PAYMENT_METHOD, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME, PAYMENT_METHODS
-from keyboards.client_keyboards import create_date_keyboard, get_back_button, get_payment_keyboard
+from constants import (
+    USE_BONUS, NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, 
+    DATE, TIME, BAGS, PAYMENT_METHOD, SUPPORT_MESSAGE, CHECK_ADDRESS, 
+    NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, 
+    FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME,
+    CONFIRM_ORDER, ASK_FAVORITE  # Добавлена ASK_FAVORITE
+)
+from keyboards.client_keyboards import create_date_keyboard, get_back_button, get_payment_keyboard, get_bags_keyboard
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from config import user_data
-from constants import NAME, PHONE, ADDRESS, ENTRANCE, FLOOR, APARTMENT, INTERCOM, DATE, TIME, BAGS, TIME_SLOTS, SUPPORT_MESSAGE, CHECK_ADDRESS, NEW_ADDRESS, NEW_ENTRANCE, NEW_FLOOR, NEW_APARTMENT, NEW_INTERCOM, FAVORITE_NAME, SELECT_ADDRESS, MANAGE_FAVORITES, EDIT_FAVORITE_NAME
-from keyboards.client_keyboards import create_date_keyboard, get_payment_keyboard, get_bags_keyboard
-from constants import CONFIRM_ORDER  # Добавьте новую константу
+import datetime  # Добавлен импорт datetime
+import re  # Добавлен импорт re
 
 # =============== НАСТРОЙКИ ГЕОГРАФИИ ===============
 ALLOWED_STREETS = [
@@ -19,7 +24,7 @@ ALLOWED_STREETS = [
     
     # Добавленные улицы
     "псковская", "ул псковская", "улица псковская",
-    "лемешева", "ся лемешева", "улица лемешева", "ул лемешева"
+    "лемешева", "ул лемешева", "улица лемешева"
 ]
 
 def is_address_allowed(address):
@@ -35,6 +40,7 @@ def is_address_allowed(address):
     
     return False
 # ==================================================
+
 # =============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===============
 def generate_address_name(user_id, street, apartment):
     """Генерирует автоматическое название для адреса"""
@@ -47,7 +53,17 @@ def generate_address_name(user_id, street, apartment):
     
     # Иначе по номеру
     return f"Адрес {len(favorites) + 1}"
+
+def get_bag_word(count):
+    """Склонение слова 'мешок'"""
+    if count == 1:
+        return "мешок"
+    elif 2 <= count <= 4:
+        return "мешка"
+    else:
+        return "мешков"
 # ======================================================
+
 async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало процесса заказа - выбор адреса (из избранного или новый)"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
@@ -58,10 +74,6 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
     
     await query.answer()
-    
-    # Просто скрываем REPLY-клавиатуру БЕЗ отправки сообщения
-    from keyboards.reply_keyboards import remove_keyboard
-    # Не отправляем пустое сообщение, просто меняем клавиатуру у следующего сообщения
     
     user_id = query.from_user.id
     user = update.effective_user
@@ -91,18 +103,19 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_info = db.get_user_by_id(user_id)
     
+    # Проверяем, есть ли телефон и адрес
     if user_info and user_info[4]:  # если есть телефон
         user_data[user_id]['name'] = user_info[2] or user.first_name
         user_data[user_id]['phone'] = user_info[4]
         user_data[user_id]['has_saved_data'] = True
         
-        # При вызове choose_address клавиатура уже будет скрыта
+        # Если есть сохранённый адрес, сразу показываем выбор адреса
         return await choose_address(update, context)
     else:
-        # Сразу отправляем сообщение с запросом имени, и клавиатура уже будет скрыта
+        # Если нет телефона - запрашиваем имя
         await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
-        
+
 async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор адреса при заказе (из избранного или новый)"""
     # Проверяем, откуда пришел вызов - из callback или напрямую
@@ -241,34 +254,33 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PAYMENT_METHOD
 
-def get_bag_word(count):
-    """Склонение слова 'мешок'"""
-    if count == 1:
-        return "мешок"
-    elif 2 <= count <= 4:
-        return "мешка"
-    else:
-        return "мешков"
+# handlers/client.py
 
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение нового адреса с проверкой района и защитой от повторного ввода"""
+    """Получение нового адреса с проверкой района и наличия номера дома"""
     user_id = update.effective_user.id
     address = update.message.text
-    
-    print(f"🏠 new_address: пользователь {user_id} вводит новый адрес: {address}")
-    
-    # Проверяем, не вводил ли пользователь уже адрес
-    if user_id in user_data and user_data[user_id].get('address_confirmed', False):
+
+    print(f"🏠 [new_address] Вход в функцию. User: {user_id}, Адрес: {address}")
+
+    # =============== ПРОВЕРКА НАЛИЧИЯ НОМЕРА ДОМА ===============
+    import re
+    if not re.search(r'\d', address):
+        print(f"🏠 [new_address] Ошибка: нет номера дома.")
         await update.message.reply_text(
-            "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
+            "❌ <b>Укажите номер дома</b>\n\n"
+            "Пожалуйста, введите адрес вместе с номером дома.\n"
+            "Например: <i>Октябрьский проспект, д. 50</i> или <i>Левитана 23</i>",
+            parse_mode='HTML'
         )
-        return ConversationHandler.END
-    
+        # Возвращаем то же состояние, чтобы пользователь попробовал снова
+        return NEW_ADDRESS
+    # ============================================================
+
     # =============== ПРОВЕРКА РАЙОНА ===============
+    from handlers.client import is_address_allowed
     if not is_address_allowed(address):
+        print(f"🏠 [new_address] Ошибка: адрес вне зоны обслуживания.")
         streets_list = (
             "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
             "• Октябрьский проспект\n"
@@ -279,7 +291,7 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Улица Псковская\n"
             "• Улица С.Я. Лемешева\n\n"
         )
-        
+
         await update.message.reply_text(
             f"❌ <b>К сожалению, этот адрес не входит в зону обслуживания</b>\n\n"
             f"{streets_list}"
@@ -289,52 +301,22 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return NEW_ADDRESS
     # ==============================================
-    
+
+    # --- ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ, СОХРАНЯЕМ АДРЕС ---
+    from config import user_data
     if user_id not in user_data:
         user_data[user_id] = {}
-        print(f"⚠️ Создана новая запись для пользователя {user_id}")
-    
-    user_data[user_id]['street_address'] = address
-    user_data[user_id]['address_confirmed'] = True  # Помечаем, что адрес уже введён
-    print(f"✅ Сохранён новый адрес: {user_data[user_id]['street_address']}")
-    print(f"🔄 Переходим к состоянию NEW_ENTRANCE ({NEW_ENTRANCE})")
-    
-    await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
-    return NEW_ENTRANCE
+        print(f"🏠 [new_address] Создана новая запись в user_data для {user_id}")
 
-    for fav in favorites:
-        if (len(fav) > 6 and
-            fav[2] == street_address and
-            fav[3] == entrance and
-            fav[4] == floor and
-            fav[5] == apartment and
-            fav[6] == intercom):
-            address_exists = True
-            break
-    
-    if not address_exists:
-        # Используем умное название
-        default_name = generate_address_name(user_id, street_address, apartment)
-        
-        db.save_favorite_address(
-            user_id,
-            default_name,
-            street_address,
-            entrance,
-            floor,
-            apartment,
-            intercom
-        )
-        print(f"✅ Адрес автоматически добавлен в избранное для пользователя {user_id} с названием '{default_name}'")
-    # =================================================================
-    
-    # Переходим к выбору даты
-    keyboard = create_date_keyboard()
-    await update.message.reply_text(
-        "✅ Адрес сохранён!\n\n📅 Шаг 2: Выберите дату вывоза:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return DATE
+    user_data[user_id]['street_address'] = address
+    print(f"🏠 [new_address] Адрес сохранен: {user_data[user_id]['street_address']}")
+
+    # Отправляем запрос на ввод подъезда
+    await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
+    print(f"🏠 [new_address] Отправлен запрос подъезда. Переход в состояние NEW_ENTRANCE.")
+
+    # ВОЗВРАЩАЕМ СЛЕДУЮЩЕЕ СОСТОЯНИЕ
+    return NEW_ENTRANCE
 
 async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение нового подъезда"""
@@ -365,7 +347,7 @@ async def new_apartment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data[user_id]['apartment'] = text if text not in ['0', '-'] else ''
     await update.message.reply_text("🔔 Введите код домофона (или 0 если нет):")
     return NEW_INTERCOM
-    
+
 async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение нового домофона и обновление адреса в БД"""
     user_id = update.effective_user.id
@@ -384,6 +366,47 @@ async def new_intercom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id].get('apartment', ''),
         user_data[user_id].get('intercom', '')
     )
+    
+    # Автоматически добавляем адрес в избранное, если его там нет
+    try:
+        # Получаем данные для проверки
+        street_address = user_data[user_id]['street_address']
+        entrance = user_data[user_id].get('entrance', '')
+        floor = user_data[user_id].get('floor', '')
+        apartment = user_data[user_id].get('apartment', '')
+        intercom = user_data[user_id].get('intercom', '')
+        
+        # Проверяем, есть ли уже этот адрес в избранном
+        favorites = db.get_user_favorite_addresses(user_id)
+        address_exists = False
+        
+        for fav in favorites:
+            if (len(fav) > 6 and
+                fav[2] == street_address and
+                fav[3] == entrance and
+                fav[4] == floor and
+                fav[5] == apartment and
+                fav[6] == intercom):
+                address_exists = True
+                break
+        
+        if not address_exists:
+            # Используем умное название
+            default_name = generate_address_name(user_id, street_address, apartment)
+            
+            db.save_favorite_address(
+                user_id,
+                default_name,
+                street_address,
+                entrance,
+                floor,
+                apartment,
+                intercom
+            )
+            print(f"✅ Адрес автоматически добавлен в избранное для пользователя {user_id} с названием '{default_name}'")
+    except Exception as e:
+        print(f"⚠️ Ошибка при добавлении в избранное: {e}")
+    # =================================================================
     
     # Переходим к выбору даты
     keyboard = create_date_keyboard()
@@ -455,7 +478,7 @@ async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return NEW_ADDRESS
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получаем имя клиента (REPLY-кнопки уже скрыты)"""
+    """Получаем имя клиента"""
     user_id = update.effective_user.id
     if user_id not in user_data:
         user_data[user_id] = {}
@@ -535,7 +558,6 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Упрощённая клавиатура — только названия слотов
     time_keyboard = []
     for slot in available_slots:
-        # Просто показываем время слота, без информации о количестве мест
         time_keyboard.append([InlineKeyboardButton(slot, callback_data=f'time_{slot}')])
     
     if not available_slots:
@@ -614,47 +636,120 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "Message is not modified" not in str(e):
             print(f"Ошибка в time_callback: {e}")
     
-    return BAGS  # Оставляем то же состояние
+    return BAGS
 
 async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка выбора способа оплаты"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = query.from_user.id
+        print(f"💳 payment_method_handler для пользователя {user_id}")
+        
+        import database as db
+        
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        
+        payment_method = query.data.replace('pay_', '')
+        
+        if payment_method == 'yookassa':
+            await query.edit_message_text(
+                "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
+                "🔧 Мы работаем над подключением этого способа.\n"
+                "Пожалуйста, выберите другой способ оплаты:\n"
+                "• 💵 Наличные курьеру\n"
+                "• 💳 Перевод на карту курьера\n\n"
+                "Приносим извинения за неудобства!",
+                parse_mode='HTML',
+                reply_markup=get_payment_keyboard()
+            )
+            return PAYMENT_METHOD
+        
+        user_data[user_id]['payment_method'] = payment_method
+        
+        # ===== ПРОВЕРКА БАЛАНСА =====
+        conn = db.get_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
+            balance = cur.fetchone()
+            if balance and balance[0] > 0:
+                user_data[user_id]['bonus_balance'] = balance[0]
+                
+                keyboard = [
+                    [
+                        InlineKeyboardButton(f"✅ Использовать {balance[0]} баллов", callback_data='use_bonus_yes'),
+                        InlineKeyboardButton("❌ Не использовать", callback_data='use_bonus_no')
+                    ]
+                ]
+                
+                await query.edit_message_text(
+                    f"🎁 <b>У вас есть {balance[0]} бонусных баллов!</b>\n\n"
+                    f"1 балл = 1 рубль скидки\n"
+                    f"Хотите использовать их для этого заказа?",
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return USE_BONUS
+        except Exception as e:
+            print(f"❌ Ошибка проверки баланса: {e}")
+        finally:
+            cur.close()
+            conn.close()
+        # ============================
+        
+        # Если нет баллов, сразу показываем подтверждение
+        await confirm_order_before_final(update, context)
+        return CONFIRM_ORDER
+        
+    except Exception as e:
+        print(f"❌ Ошибка в payment_method_handler: {e}")
+        return ConversationHandler.END
+
+async def use_bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик выбора использования бонусов"""
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
+    choice = query.data
     
-    if user_id not in user_data:
-        print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
-        user_data[user_id] = {}
+    if choice == 'use_bonus_yes':
+        user_data[user_id]['use_bonus'] = True
+    else:
+        user_data[user_id]['use_bonus'] = False
     
-    payment_method = query.data.replace('pay_', '')
-    
-    if payment_method == 'yookassa':
-        await query.edit_message_text(
-            "💳 <b>Онлайн-оплата временно недоступна</b>\n\n"
-            "🔧 Мы работаем над подключением этого способа.\n"
-            "Пожалуйста, выберите другой способ оплаты:\n"
-            "• 💵 Наличные курьеру\n"
-            "• 💳 Перевод на карту курьера\n\n"
-            "Приносим извинения за неудобства!",
-            parse_mode='HTML',
-            reply_markup=get_payment_keyboard()
-        )
-        return PAYMENT_METHOD
-    
-    user_data[user_id]['payment_method'] = payment_method
-    
-    # Переходим к подтверждению
-    from handlers.client import confirm_order_before_final
     await confirm_order_before_final(update, context)
     return CONFIRM_ORDER
-    
+
 async def back_to_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Возврат к выбору времени"""
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
+    
+    # Проверяем, есть ли данные пользователя
+    if user_id not in user_data:
+        await query.edit_message_text(
+            "❌ Сессия заказа истекла. Начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    # Проверяем, есть ли нужные поля
+    if 'order_date' not in user_data[user_id] or 'order_time' not in user_data[user_id]:
+        await query.edit_message_text(
+            "❌ Данные заказа повреждены. Начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
     
     # Возвращаемся к выбору времени
     await query.edit_message_text(
@@ -719,7 +814,13 @@ async def get_bags(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id]['bags_selected'] = True
         
         # Переходим к оплате
-        await payment_method_after_bags(update, context, bags)
+        await update.message.reply_text(
+            f"🛍 Выбрано: <b>{bags} {get_bag_word(bags)}</b>\n\n"
+            f"💳 Шаг 4: Выберите способ оплаты",
+            parse_mode='HTML',
+            reply_markup=get_payment_keyboard()
+        )
+        return PAYMENT_METHOD
         
     except ValueError:
         await update.message.reply_text(
@@ -743,19 +844,30 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
     bags = user_data[user_id]['bags_count']
     payment = user_data[user_id]['payment_method']
     
+    from utils.helpers import calculate_price
+    original_price = calculate_price(bags)
+    final_price = original_price
+    
+    # Проверяем, использованы ли бонусы
+    use_bonus = user_data[user_id].get('use_bonus', False)
+    bonus_text = ""
+    
+    if use_bonus:
+        balance = user_data[user_id].get('bonus_balance', 0)
+        if balance >= original_price:
+            # Можно оплатить полностью
+            final_price = 0
+            bonus_text = f"\n🎁 Скидка баллами: -{original_price} ₽\n💰 К оплате: 0 ₽ (бесплатно!)"
+        else:
+            # Частичная оплата
+            final_price = original_price - balance
+            bonus_text = f"\n🎁 Скидка баллами: -{balance} ₽\n💰 К оплате: {final_price} ₽"
+    
     payment_names = {
         'cash': '💵 Наличные',
         'card': '💳 Перевод на карту',
         'yookassa': '💰 Онлайн'
     }
-    
-    def get_bag_word(count):
-        if count == 1:
-            return "мешок"
-        elif 2 <= count <= 4:
-            return "мешка"
-        else:
-            return "мешков"
     
     text = (
         f"📋 <b>Проверьте данные заказа:</b>\n\n"
@@ -764,16 +876,21 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
         f"📍 {address}\n"
         f"📅 {date} {time}\n"
         f"🛍 {bags} {get_bag_word(bags)}\n"
-        f"💳 {payment_names.get(payment, payment)}\n\n"
+        f"💳 Оплата: {payment_names.get(payment, payment)}"
+        f"{bonus_text}\n\n"
         f"✅ Всё верно?"
     )
     
     keyboard = [
         [
             InlineKeyboardButton("✅ Да, подтвердить", callback_data='final_confirm'),
-            InlineKeyboardButton("✏️ Изменить", callback_data='change_address')  // ИСПРАВЛЕНО
+            InlineKeyboardButton("✏️ Изменить", callback_data='change_address')
         ]
     ]
+    
+    # Сохраняем финальную цену
+    user_data[user_id]['final_price'] = final_price
+    user_data[user_id]['used_bonus'] = balance if use_bonus else 0
     
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -785,93 +902,318 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
 
 async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Финальное подтверждение и создание заказа"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = query.from_user.id
+        print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")
+        
+        # Проверяем, есть ли данные пользователя
+        if user_id not in user_data:
+            await query.edit_message_text(
+                "❌ Произошла ошибка. Начните заказ заново.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+                ]])
+            )
+            return ConversationHandler.END
+        
+        from config import admin_data
+        from utils.helpers import calculate_price
+        import database as db
+        from handlers.admin import notify_admin
+        
+        # Получаем данные из user_data
+        name = user_data[user_id]['name']
+        phone = user_data[user_id]['phone']
+        street_address = user_data[user_id]['street_address']
+        entrance = user_data[user_id].get('entrance', '')
+        floor = user_data[user_id].get('floor', '')
+        apartment = user_data[user_id].get('apartment', '')
+        intercom = user_data[user_id].get('intercom', '')
+        order_date = user_data[user_id]['order_date']
+        order_time = user_data[user_id]['order_time']
+        bags = user_data[user_id]['bags_count']
+        payment_method = user_data[user_id]['payment_method']
+        
+        # Рассчитываем цену
+        price = calculate_price(bags)
+        
+        # Проверяем, свободен ли слот
+        is_free = db.is_time_slot_free(order_date, order_time)
+        
+        if not is_free:
+            keyboard = create_date_keyboard()
+            await query.edit_message_text(
+                "❌ К сожалению, это время только что заняли.\n"
+                "Пожалуйста, выберите другую дату:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            if user_id in user_data:
+                del user_data[user_id]
+            return DATE
+        
+        # Создаём заказ
+        result = db.create_order(
+            user_id=user_id,
+            client_name=name,
+            phone=phone,
+            street_address=street_address,
+            entrance=entrance,
+            floor=floor,
+            apartment=apartment,
+            intercom=intercom,
+            order_date=order_date,
+            order_time=order_time,
+            bags_count=bags,
+            price=price,
+            payment_method=payment_method
+        )
+        
+        print(f"🔍 РЕЗУЛЬТАТ СОЗДАНИЯ ЗАКАЗА: {result}")
+        
+        if result[0] is False:
+            print(f"❌ ОШИБКА СОЗДАНИЯ ЗАКАЗА: {result[1]}")
+            await query.edit_message_text(
+                f"❌ {result[1]}\n\nПожалуйста, попробуйте ещё раз.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+                ]])
+            )
+            if user_id in user_data:
+                del user_data[user_id]
+            return ConversationHandler.END
+        
+        order_id = result[0]
+        
+        # ===== СОХРАНЕНИЕ АДРЕСА В ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ =====
+        try:
+            # Обновляем адрес пользователя в таблице users
+            db.update_user_address(
+                user_id,
+                street_address,
+                entrance,
+                floor,
+                apartment,
+                intercom
+            )
+            print(f"✅ Адрес пользователя {user_id} сохранён в профиль")
+        except Exception as e:
+            print(f"❌ Ошибка сохранения адреса: {e}")
+        # ====================================================
+        
+        # ===== СПИСАНИЕ БОНУСОВ =====
+        if user_data[user_id].get('use_bonus', False):
+            used_bonus = user_data[user_id].get('used_bonus', 0)
+            if used_bonus > 0:
+                conn = db.get_connection()
+                cur = conn.cursor()
+                try:
+                    # Списываем баллы
+                    cur.execute('''
+                        UPDATE users 
+                        SET referral_balance = referral_balance - %s 
+                        WHERE user_id = %s
+                    ''', (used_bonus, user_id))
+                    
+                    # Записываем трату
+                    cur.execute('''
+                        INSERT INTO referral_spendings (user_id, amount, order_id, created_at)
+                        VALUES (%s, %s, %s, %s)
+                    ''', (user_id, used_bonus, order_id, datetime.datetime.now()))
+                    
+                    conn.commit()
+                    print(f"✅ Списано {used_bonus} баллов у пользователя {user_id}")
+                except Exception as e:
+                    print(f"❌ Ошибка списания баллов: {e}")
+                finally:
+                    cur.close()
+                    conn.close()
+        # ============================
+        
+        # ===== НАЧИСЛЕНИЕ БАЛЛОВ ЗА РЕФЕРАЛА =====
+        conn = db.get_connection()
+        cur = conn.cursor()
+        try:
+            # Проверяем, не пришёл ли пользователь по реферальной ссылке
+            cur.execute('SELECT referred_by FROM users WHERE user_id = %s', (user_id,))
+            referred_by = cur.fetchone()
+            
+            if referred_by and referred_by[0]:
+                referrer_id = referred_by[0]
+                # Начисляем баллы пригласившему
+                db.process_referral_reward(referrer_id, user_id, order_id)
+                print(f"✅ Начислены баллы за реферала {user_id} пользователю {referrer_id}")
+        except Exception as e:
+            print(f"❌ Ошибка проверки реферала: {e}")
+        finally:
+            cur.close()
+            conn.close()
+        # ========================================
+        
+        # Формируем полный адрес для сообщения
+        full_address = street_address
+        details = []
+        if entrance and entrance not in ['0', '-']:
+            details.append(f"под. {entrance}")
+        if floor and floor not in ['0', '-']:
+            details.append(f"эт. {floor}")
+        if apartment and apartment not in ['0', '-']:
+            details.append(f"кв. {apartment}")
+        if intercom and intercom not in ['0', '-']:
+            details.append(f"домофон {intercom}")
+        if details:
+            full_address += f" ({', '.join(details)})"
+        
+        # Текст о цене
+        if bags == 1:
+            price_text = f"💰 {price} ₽ (за 1 пакет)"
+        elif bags == 2:
+            price_text = f"💰 {price} ₽ (за 2 пакета)"
+        else:
+            price_text = f"💰 {price} ₽ (фиксированная цена за {bags} пакетов)"
+        
+        # Текст об оплате
+        payment_names = {
+            'cash': '💵 Наличные курьеру',
+            'card': '💳 Перевод на карту курьера',
+            'yookassa': '💰 Онлайн-оплата'
+        }
+        payment_text = f"💳 Оплата: {payment_names.get(payment_method, 'Неизвестно')}"
+        
+        await query.edit_message_text(
+            f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
+            f"👤 {name}\n"
+            f"📞 {phone}\n"
+            f"📍 {full_address}\n"
+            f"📅 {order_date} {order_time}\n"
+            f"🛍 {bags} пакетов\n"
+            f"{price_text}\n"
+            f"{payment_text}\n\n"
+            f"🚶‍♂️ <b>Что дальше?</b>\n"
+            f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
+            f"Подтверждение заказа придёт отдельно.",
+            parse_mode='HTML'
+        )
+        
+        # Уведомление админам
+        for admin_id in admin_data['admins']:
+            try:
+                # Получаем заказ для уведомления
+                order = db.get_order_by_id(order_id)
+                if order:
+                    # Формируем текст уведомления
+                    username = db.get_username_by_id(user_id)
+                    username_text = f" (@{username})" if username and username != "неизвестно" else ""
+                    
+                    # Формируем адрес
+                    full_address = street_address
+                    details = []
+                    if entrance and entrance not in ['0', '-']:
+                        details.append(f"под. {entrance}")
+                    if floor and floor not in ['0', '-']:
+                        details.append(f"эт. {floor}")
+                    if apartment and apartment not in ['0', '-']:
+                        details.append(f"кв. {apartment}")
+                    if intercom and intercom not in ['0', '-']:
+                        details.append(f"домофон {intercom}")
+                    if details:
+                        full_address += f" ({', '.join(details)})"
+                    
+                    text = (
+                        f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
+                        f"👤 {name}{username_text}\n"
+                        f"📞 {phone}\n"
+                        f"📍 {full_address}\n"
+                        f"📅 {order_date} {order_time}\n"
+                        f"🛍 {bags} пакетов\n"
+                        f"💰 {price} ₽\n"
+                    )
+                    
+                    # Кнопки для админа
+                    keyboard = []
+                    
+                    # Кнопка связи если есть username
+                    if username and username != "неизвестно":
+                        clean_username = username.replace('@', '')
+                        keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
+                    
+                    # Кнопки управления заказом
+                    keyboard.append([
+                        InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
+                        InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
+                        InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
+                    ])
+                    
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=text,
+                        parse_mode='HTML',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    print(f"✅ Уведомление о заказе #{order_id} отправлено админу {admin_id}")
+            except Exception as e:
+                print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
+        
+        # Спрашиваем про избранное (сохраняем user_id для этого)
+        context.user_data['last_order_user_id'] = user_id
+        await ask_add_to_favorites(update, context)
+        return ASK_FAVORITE
+        
+    except Exception as e:
+        print(f"❌ Ошибка в final_confirm_order: {e}")
+        import traceback
+        traceback.print_exc()
+        return ConversationHandler.END
+
+async def ask_add_to_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Спрашивает пользователя, хочет ли он добавить адрес в избранное"""
     query = update.callback_query
     await query.answer()
     
-    user_id = query.from_user.id
-    print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")  # ← ДОБАВЬТЕ
+    # Получаем user_id из разных возможных источников
+    if 'last_order_user_id' in context.user_data:
+        user_id = context.user_data['last_order_user_id']
+        del context.user_data['last_order_user_id']
+    else:
+        user_id = query.from_user.id
     
-    # Проверяем, есть ли данные пользователя
+    # Проверяем, есть ли данные пользователя в user_data
     if user_id not in user_data:
+        # Если нет, просто показываем главное меню
+        from keyboards.client_keyboards import get_main_keyboard
+        from config import admin_data
+        is_admin = user_id in admin_data['admins']
+        keyboard = get_main_keyboard(is_admin)
+        
         await query.edit_message_text(
-            "❌ Произошла ошибка. Начните заказ заново.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
+            "👋 Главное меню:",
+            reply_markup=keyboard
         )
         return ConversationHandler.END
     
-    from config import admin_data
-    from utils.helpers import calculate_price
-    import database as db
-    from handlers.admin import notify_admin
-    
-    # Получаем данные из user_data
-    name = user_data[user_id]['name']
-    phone = user_data[user_id]['phone']
-    street_address = user_data[user_id]['street_address']
+    # Получаем данные адреса из user_data
+    street_address = user_data[user_id].get('street_address', '')
     entrance = user_data[user_id].get('entrance', '')
     floor = user_data[user_id].get('floor', '')
     apartment = user_data[user_id].get('apartment', '')
     intercom = user_data[user_id].get('intercom', '')
-    order_date = user_data[user_id]['order_date']
-    order_time = user_data[user_id]['order_time']
-    bags = user_data[user_id]['bags_count']
-    payment_method = user_data[user_id]['payment_method']
     
-    # Рассчитываем цену
-    price = calculate_price(bags)
-    
-    # Проверяем, свободен ли слот
-    is_free = db.is_time_slot_free(order_date, order_time)
-    
-    if not is_free:
-        keyboard = create_date_keyboard()
+    if not street_address:
+        # Если нет адреса, просто возвращаемся в меню
+        from keyboards.client_keyboards import get_main_keyboard
+        from config import admin_data
+        is_admin = user_id in admin_data['admins']
+        keyboard = get_main_keyboard(is_admin)
+        
         await query.edit_message_text(
-            "❌ К сожалению, это время только что заняли.\n"
-            "Пожалуйста, выберите другую дату:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "👋 Главное меню:",
+            reply_markup=keyboard
         )
-        if user_id in user_data:
-            del user_data[user_id]
-        return DATE
-    
-    # Создаём заказ
-    result = db.create_order(
-        user_id=user_id,
-        client_name=name,
-        phone=phone,
-        street_address=street_address,
-        entrance=entrance,
-        floor=floor,
-        apartment=apartment,
-        intercom=intercom,
-        order_date=order_date,
-        order_time=order_time,
-        bags_count=bags,
-        price=price,
-        payment_method=payment_method
-    )
-    
-    print(f"🔍 РЕЗУЛЬТАТ СОЗДАНИЯ ЗАКАЗА: {result}")  # ← ДОБАВЬТЕ
-    
-    if result[0] is False:
-        print(f"❌ ОШИБКА СОЗДАНИЯ ЗАКАЗА: {result[1]}")  # ← ДОБАВЬТЕ
-    
-    if result[0] is False:
-        await query.edit_message_text(
-            f"❌ {result[1]}\n\nПожалуйста, попробуйте ещё раз.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        if user_id in user_data:
-            del user_data[user_id]
         return ConversationHandler.END
     
-    order_id = result[0]
-    
-    # Формируем полный адрес для сообщения
+    # Формируем красивый адрес
     full_address = street_address
     details = []
     if entrance and entrance not in ['0', '-']:
@@ -885,117 +1227,45 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
     if details:
         full_address += f" ({', '.join(details)})"
     
-    # Текст о цене
-    if bags == 1:
-        price_text = f"💰 {price} ₽ (за 1 пакет)"
-    elif bags == 2:
-        price_text = f"💰 {price} ₽ (за 2 пакета)"
+    # Проверяем, есть ли уже этот адрес в избранном
+    import database as db
+    favorites = db.get_user_favorite_addresses(user_id)
+    address_exists = False
+    
+    for fav in favorites:
+        if (fav[2] == street_address and
+            fav[3] == entrance and
+            fav[4] == floor and
+            fav[5] == apartment and
+            fav[6] == intercom):
+            address_exists = True
+            break
+    
+    if address_exists:
+        # Если адрес уже есть в избранном, просто показываем меню
+        text = f"✅ <b>Заказ оформлен!</b>\n\n📍 {full_address}\n\nАдрес уже есть в избранном."
+        keyboard = [[InlineKeyboardButton("◀️ В главное меню", callback_data='back_to_menu')]]
     else:
-        price_text = f"💰 {price} ₽ (фиксированная цена за {bags} пакетов)"
-    
-    # Текст об оплате
-    payment_names = {
-        'cash': '💵 Наличные курьеру',
-        'card': '💳 Перевод на карту курьера',
-        'yookassa': '💰 Онлайн-оплата'
-    }
-    payment_text = f"💳 Оплата: {payment_names.get(payment_method, 'Неизвестно')}"
-    
-    from keyboards.client_keyboards import get_main_keyboard
-    is_admin = user_id in admin_data['admins']
+        # Спрашиваем, добавить ли в избранное
+        text = (
+            f"✅ <b>Заказ оформлен!</b>\n\n"
+            f"📍 <b>Ваш адрес:</b>\n{full_address}\n\n"
+            f"⭐ Хотите добавить этот адрес в избранное?\n"
+            f"В следующий раз не нужно будет вводить его заново!"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Да, добавить", callback_data='favorite_add_after_order'),
+                InlineKeyboardButton("❌ Нет", callback_data='back_to_menu')
+            ]
+        ]
     
     await query.edit_message_text(
-        f"✅ <b>Заказ #{order_id} принят!</b>\n\n"
-        f"👤 {name}\n"
-        f"📞 {phone}\n"
-        f"📍 {full_address}\n"
-        f"📅 {order_date} {order_time}\n"
-        f"🛍 {bags} пакетов\n"
-        f"{price_text}\n"
-        f"{payment_text}\n\n"
-        f"🚶‍♂️ <b>Что дальше?</b>\n"
-        f"Курьер приедет в указанное время, поднимется к вам и заберёт пакеты.\n"
-        f"Подтверждение заказа придёт отдельно.",
+        text,
         parse_mode='HTML',
-        reply_markup=get_main_keyboard(is_admin)
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    
-    # Уведомление админам
-    for admin_id in admin_data['admins']:
-        try:
-            # Получаем заказ для уведомления
-            order = db.get_order_by_id(order_id)
-            if order:
-                # Формируем текст уведомления
-                username = db.get_username_by_id(user_id)
-                username_text = f" (@{username})" if username and username != "неизвестно" else ""
-                
-                # Формируем адрес
-                full_address = street_address
-                details = []
-                if entrance and entrance not in ['0', '-']:
-                    details.append(f"под. {entrance}")
-                if floor and floor not in ['0', '-']:
-                    details.append(f"эт. {floor}")
-                if apartment and apartment not in ['0', '-']:
-                    details.append(f"кв. {apartment}")
-                if intercom and intercom not in ['0', '-']:
-                    details.append(f"домофон {intercom}")
-                if details:
-                    full_address += f" ({', '.join(details)})"
-                
-                text = (
-                    f"🚨 <b>НОВЫЙ ЗАКАЗ #{order_id} (НА ВЫНОС)</b>\n\n"
-                    f"👤 {name}{username_text}\n"
-                    f"📞 {phone}\n"
-                    f"📍 {full_address}\n"
-                    f"📅 {order_date} {order_time}\n"
-                    f"🛍 {bags} пакетов\n"
-                    f"💰 {price} ₽\n"
-                )
-                
-                # Кнопки для админа
-                keyboard = []
-                
-                # Кнопка связи если есть username
-                if username and username != "неизвестно":
-                    clean_username = username.replace('@', '')
-                    keyboard.append([InlineKeyboardButton("💬 Написать клиенту", url=f"https://t.me/{clean_username}")])
-                
-                # Кнопки управления заказом
-                keyboard.append([
-                    InlineKeyboardButton("✅ Подтверждаю", callback_data=f'confirm_{order_id}'),
-                    InlineKeyboardButton("✅ Выполнено", callback_data=f'complete_{order_id}'),
-                    InlineKeyboardButton("❌ Отменить", callback_data=f'cancel_{order_id}')
-                ])
-                
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=text,
-                    parse_mode='HTML',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                print(f"✅ Уведомление о заказе #{order_id} отправлено админу {admin_id}")
-        except Exception as e:
-            print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
-    
-    # Очищаем данные пользователя (ВНЕ ЦИКЛА!)
-    if user_id in user_data:
-        del user_data[user_id]
-    
-    return ConversationHandler.END  # ВНЕ ЦИКЛА!
-
-async def payment_method_after_bags(update: Update, context: ContextTypes.DEFAULT_TYPE, bags):
-    """Переход к оплате после выбора количества мешков"""
-    user_id = update.effective_user.id
-    
-    await update.message.reply_text(
-        f"🛍 Выбрано: <b>{bags} {get_bag_word(bags)}</b>\n\n"
-        f"💳 Шаг 4: Выберите способ оплаты",
-        parse_mode='HTML',
-        reply_markup=get_payment_keyboard()
-    )
-    return PAYMENT_METHOD
+    return ASK_FAVORITE
 
 async def favorite_add_after_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Добавление адреса в избранное после завершения заказа"""
@@ -1003,75 +1273,89 @@ async def favorite_add_after_order(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     
     user_id = query.from_user.id
+    
+    # Проверяем, есть ли данные в user_data
+    if user_id not in user_data:
+        # Если данных нет, показываем сообщение об ошибке
+        from keyboards.client_keyboards import get_main_keyboard
+        from config import admin_data
+        is_admin = user_id in admin_data['admins']
+        
+        await query.edit_message_text(
+            "❌ Данные заказа не найдены. Адрес не добавлен в избранное.",
+            reply_markup=get_main_keyboard(is_admin)
+        )
+        return ConversationHandler.END
+    
+    # Получаем данные адреса из user_data
+    street_address = user_data[user_id].get('street_address', '')
+    entrance = user_data[user_id].get('entrance', '')
+    floor = user_data[user_id].get('floor', '')
+    apartment = user_data[user_id].get('apartment', '')
+    intercom = user_data[user_id].get('intercom', '')
+    
+    if not street_address:
+        from keyboards.client_keyboards import get_main_keyboard
+        from config import admin_data
+        is_admin = user_id in admin_data['admins']
+        
+        await query.edit_message_text(
+            "❌ Адрес не найден",
+            reply_markup=get_main_keyboard(is_admin)
+        )
+        return ConversationHandler.END
+    
     import database as db
     
-    # Получаем данные пользователя из базы данных
-    user_info = db.get_user_by_id(user_id)
-    
-    # Проверяем, есть ли у пользователя сохранённый адрес в базе
-    if not user_info or not user_info[5]:
-        await query.edit_message_text(
-            "❌ Не удалось найти адрес для сохранения.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-            ]])
-        )
-        return
-    
-    # Проверяем, не добавлен ли уже этот адрес в избранное
+    # Получаем список избранного для определения названия
     favorites = db.get_user_favorite_addresses(user_id)
-    for fav in favorites:
-        if (fav[2] == user_info[5] and
-            fav[3] == user_info[6] and
-            fav[4] == user_info[7] and
-            fav[5] == user_info[8] and
-            fav[6] == user_info[9]):
-            await query.edit_message_text(
-                "❌ Этот адрес уже есть в избранном!",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu'),
-                    InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-                ]])
-            )
-            return
     
     # Создаем название по умолчанию
-    default_name = f"Адрес {len(favorites) + 1}"
+    default_name = generate_address_name(user_id, street_address, apartment)
     
     # Сохраняем адрес в избранное
     db.save_favorite_address(
         user_id,
         default_name,
-        user_info[5],
-        user_info[6] or '',
-        user_info[7] or '',
-        user_info[8] or '',
-        user_info[9] or ''
+        street_address,
+        entrance,
+        floor,
+        apartment,
+        intercom
     )
     
     # Формируем красивый адрес для подтверждения
-    full_address = user_info[5]
+    full_address = street_address
     details = []
-    if user_info[6]:
-        details.append(f"под. {user_info[6]}")
-    if user_info[7]:
-        details.append(f"эт. {user_info[7]}")
-    if user_info[8]:
-        details.append(f"кв. {user_info[8]}")
-    if user_info[9]:
-        details.append(f"домофон {user_info[9]}")
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apartment and apartment not in ['0', '-']:
+        details.append(f"кв. {apartment}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
     if details:
         full_address += f" ({', '.join(details)})"
     
+    from keyboards.client_keyboards import get_main_keyboard
+    from config import admin_data
+    is_admin = user_id in admin_data['admins']
+    
     await query.edit_message_text(
-        f"✅ Адрес добавлен в избранное!\n\n"
-        f"📍 {full_address}\n\n"
+        f"✅ <b>Адрес добавлен в избранное!</b>\n\n"
+        f"📍 {full_address}\n"
+        f"🏷 Название: {default_name}\n\n"
         f"Вы можете изменить название в разделе 'Мои адреса'.",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu'),
-            InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-        ]])
+        parse_mode='HTML',
+        reply_markup=get_main_keyboard(is_admin)
     )
+    
+    # Очищаем данные пользователя
+    if user_id in user_data:
+        del user_data[user_id]
+    
+    return ConversationHandler.END
 
 async def favorite_delete_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню удаления избранных адресов"""
@@ -1370,7 +1654,14 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     keyboard = []
     for order in orders[:5]:
-        order_id, _, _, _, _, date, time, bags, price, status, _ = order
+        # УНИВЕРСАЛЬНАЯ РАСПАКОВКА - берем только то, что нам нужно
+        # order может быть кортежем разной длины, поэтому используем индексы
+        order_id = order[0]  # ID заказа всегда первый
+        date = order[9] if len(order) > 9 else "неизвестно"  # дата
+        time = order[10] if len(order) > 10 else "неизвестно"  # время
+        bags = order[11] if len(order) > 11 else 0  # мешки
+        status = order[13] if len(order) > 13 else 'unknown'  # статус
+        
         status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
         button_text = f"{status_emoji} #{order_id} от {date} {time} ({bags} меш.)"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f'order_detail_{order_id}')])
@@ -1381,7 +1672,6 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
         "Выберите заказ для просмотра:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальный просмотр истории заказов"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
@@ -1447,6 +1737,7 @@ async def repeat_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     order_id = int(query.data.replace('repeat_order_', ''))
+    import database as db
     order = db.get_order_by_id(order_id)
     
     if not order:
@@ -1527,7 +1818,6 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
-# =============== ВСТАВЬТЕ НОВУЮ ФУНКЦИЮ ЗДЕСЬ ===============
 async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню избранных адресов"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
@@ -1676,7 +1966,6 @@ async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
-
 async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия start_order для reply-кнопок"""
     user_id = update.effective_user.id
@@ -1711,7 +2000,6 @@ async def start_order_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📝 Шаг 1: Введите ваше имя:")
         return NAME
 
-# =============== ДОБАВЬ ЭТУ ФУНКЦИЮ ===============
 async def choose_address_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия choose_address для reply-кнопок"""
     user_id = update.effective_user.id
@@ -1740,11 +2028,9 @@ async def choose_address_reply(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return SELECT_ADDRESS
-# =================================================
 
 async def my_orders_detail_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия my_orders_detail для reply-кнопок"""
-    # ... остальной код
     user_id = update.effective_user.id
     import database as db
     orders = db.get_user_orders(user_id)

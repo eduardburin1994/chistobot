@@ -1,4 +1,5 @@
 # handlers/admin.py
+import html  # добавь в начале файла
 from config import admin_data, WORK_HOURS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
@@ -378,7 +379,14 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += "Последние рассылки:\n"
         for b in broadcasts[:3]:
             b_id, admin_id, msg, date, count = b
-            text += f"• {date[:10]}: {msg[:30]}... ({count} пол.)\n"
+            # Преобразуем datetime в строку
+            if date:
+                date_str = date.strftime("%d.%m.%Y")
+            else:
+                date_str = "неизвестно"
+            # Экранируем HTML в сообщении
+            safe_msg = html.escape(msg[:30])
+            text += f"• {date_str}: {safe_msg}... ({count} пол.)\n"
         text += "\n"
     
     text += "Выберите действие:"
@@ -396,26 +404,38 @@ async def broadcast_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    # Кнопка отмены
+    cancel_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("❌ Отмена", callback_data='admin_broadcast')
+    ]])
+    
     await query.edit_message_text(
-        "📝 Введите текст сообщения для рассылки всем клиентам:"
+        "📝 Введите текст сообщения для рассылки всем клиентам:",
+        reply_markup=cancel_keyboard
     )
     return BROADCAST_MESSAGE
 
 async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправка рассылки"""
     admin_id = update.effective_user.id
+    
+    if admin_id not in admin_data['admins']:
+        await update.message.reply_text("⛔ Доступ запрещён")
+        return ConversationHandler.END
+    
     message_text = update.message.text
+    
+    # Кнопка отмены во время отправки
+    await update.message.reply_text(
+        "📨 Рассылка началась... это может занять некоторое время.\n"
+        "Вы получите отчёт о результате."
+    )
     
     # Получаем всех пользователей
     users = db.get_all_users()
     
     # Сохраняем рассылку
     broadcast_id = db.save_broadcast(admin_id, message_text)
-    
-    await update.message.reply_text(
-        f"📨 Начинаю рассылку {len(users)} пользователям...\n"
-        f"Это может занять некоторое время."
-    )
     
     # Отправляем сообщения
     success = 0
@@ -430,7 +450,7 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Формируем клавиатуру с кнопкой ответа
             keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("💬 Ответить", callback_data=f'support_write')
+                InlineKeyboardButton("💬 Ответить", callback_data='support_write')
             ]])
             
             await context.bot.send_message(
@@ -447,13 +467,16 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обновляем статистику
     db.update_broadcast_count(broadcast_id, success)
     
+    # Кнопка возврата
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("◀️ Назад к рассылкам", callback_data='admin_broadcast')
+    ]])
+    
     await update.message.reply_text(
         f"✅ Рассылка завершена!\n"
         f"📨 Успешно отправлено: {success}\n"
         f"❌ Не удалось отправить: {failed}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ В админку", callback_data='admin')
-        ]])
+        reply_markup=keyboard
     )
     
     return ConversationHandler.END
@@ -481,12 +504,19 @@ async def broadcast_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     for i, b in enumerate(broadcasts[:10]):
         b_id, admin_id, msg, date, count = b
+        
+        # Преобразуем datetime в строку
+        if date:
+            date_str = date.strftime("%d.%m.%Y %H:%M")
+        else:
+            date_str = "неизвестно"
+        
         # Обрезаем длинное сообщение
         short_msg = msg[:50] + "..." if len(msg) > 50 else msg
-        text += f"<b>#{b_id}</b> от {date[:16]}\n"
+        
+        text += f"<b>#{b_id}</b> от {date_str}\n"
         text += f"📝 {short_msg}\n"
-        text += f"👥 Получателей: {count}\n"
-        text += f"🆔 Админ: {admin_id}\n\n"
+        text += f"👥 Получателей: {count}\n\n"
     
     if len(broadcasts) > 10:
         text += f"... и ещё {len(broadcasts) - 10} рассылок"
@@ -551,10 +581,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🧪 Тест", callback_data='toggle_test_mode')
         ],
         [
-            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export'),
-            InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')
+            InlineKeyboardButton("🎁 Рефералы", callback_data='admin_referral_stats'),  # ← НОВАЯ КНОПКА
+            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export')
         ],
         [
+            InlineKeyboardButton("🚪 Выйти", callback_data='admin_logout'),  # ← НОВАЯ КНОПКА
             InlineKeyboardButton("◀️ Меню", callback_data='back_to_menu')
         ]
     ]
@@ -1012,11 +1043,16 @@ async def admin_write_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return ConversationHandler.END
     
-    # Если просто вызвали команду (без ID)
+    # Если просто вызвали команду (без ID) - добавляем кнопку отмены
+    cancel_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("❌ Отмена", callback_data='admin')
+    ]])
+    
     await query.edit_message_text(
         "✏️ <b>Отправка сообщения клиенту</b>\n\n"
         "Введите ID пользователя, которому хотите написать:",
-        parse_mode='HTML'
+        parse_mode='HTML',
+        reply_markup=cancel_keyboard
     )
     return ENTER_USER_ID_FOR_MESSAGE
 
@@ -1053,18 +1089,27 @@ async def enter_user_id_for_message(update: Update, context: ContextTypes.DEFAUL
             )
             return SEND_MESSAGE_TO_USER
         else:
+            # Кнопка отмены при ошибке
+            cancel_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data='admin')
+            ]])
+            
             await update.message.reply_text(
                 "❌ Пользователь с таким ID не найден в базе.\n"
                 "Попробуйте другой ID:",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Отмена", callback_data='admin')
-                ]])
+                reply_markup=cancel_keyboard
             )
             return ENTER_USER_ID_FOR_MESSAGE
             
     except ValueError:
+        # Кнопка отмены при ошибке ввода
+        cancel_keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data='admin')
+        ]])
+        
         await update.message.reply_text(
-            "❌ Введите корректный ID (только цифры):"
+            "❌ Введите корректный ID (только цифры):",
+            reply_markup=cancel_keyboard
         )
         return ENTER_USER_ID_FOR_MESSAGE
 
@@ -1508,7 +1553,7 @@ async def show_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр всех сообщений от клиентов"""
+    """Главное меню сообщений (мини-мессенджер)"""
     query = update.callback_query
     await query.answer()
     
@@ -1516,35 +1561,33 @@ async def admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⛔ Доступ запрещён")
         return
     
-    messages = db.get_all_messages()
+    # Получаем статистику из базы данных
+    import database as db
+    total_new = db.get_total_unread_messages()
+    dialogs_count = db.get_dialogs_count()
     
-    if not messages:
-        await query.edit_message_text(
-            "📭 Нет сообщений от клиентов",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
-            ]])
-        )
-        return
-    
-    text = "💬 <b>Сообщения от клиентов:</b>\n\n"
-    
-    for msg in messages[:10]:
-        # msg: (id, user_id, username, first_name, phone, user_msg, reply, status, created)
-        msg_id, user_id, username, first_name, phone, user_msg, reply, status, created = msg
-        
-        status_emoji = "🆕" if status == 'new' else "✅"
-        username_text = f"@{username}" if username else first_name
-        
-        # Обрезаем длинные сообщения
-        short_msg = user_msg[:50] + "..." if len(user_msg) > 50 else user_msg
-        
-        text += f"{status_emoji} <b>#{msg_id}</b> от {username_text}\n"
-        text += f"📝 {short_msg}\n"
-        text += f"📅 {created}\n\n"
+    text = (
+        "💬 <b>ЦЕНТР СООБЩЕНИЙ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"📥 Новых сообщений: {total_new}\n"
+        f"👥 Диалогов: {dialogs_count}\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Выберите раздел:"
+    )
     
     keyboard = [
-        [InlineKeyboardButton("📋 Подробнее", callback_data='admin_messages_all')],
+        [
+            InlineKeyboardButton("📥 Все диалоги", callback_data='admin_dialogs_all'),
+            InlineKeyboardButton("🆕 Новые", callback_data='admin_dialogs_new')
+        ],
+        [
+            InlineKeyboardButton("⭐ Важные", callback_data='admin_dialogs_important'),
+            InlineKeyboardButton("📤 Исходящие", callback_data='admin_dialogs_outbox')
+        ],
+        [
+            InlineKeyboardButton("🔍 Поиск", callback_data='admin_messages_search'),
+            InlineKeyboardButton("🗑 Корзина", callback_data='admin_messages_trash')
+        ],
         [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
     ]
     
@@ -1676,18 +1719,30 @@ async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_type = context.user_data.get('editing_price')
         
         if price_type:
-            admin_data['prices'][price_type] = new_price
+            # Преобразуем ключ '3+' в строку для БД
+            if price_type == '3':
+                price_key = '3+'
+            else:
+                price_key = price_type
+            
+            admin_data['prices'][price_key] = new_price
+            
+            # Сохраняем в БД
+            db.save_prices(admin_data['prices'])
             
             await update.message.reply_text(
                 f"✅ Цена успешно изменена!\n\n"
                 f"Новые цены:\n"
                 f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
                 f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
-                f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок",
+                f"• 3+ пакетов: {admin_data['prices']['3+']} ₽",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("◀️ В админку", callback_data='admin')
                 ]])
             )
+        else:
+            await update.message.reply_text("❌ Не удалось определить тип цены")
+            
     except ValueError:
         await update.message.reply_text("❌ Введите число!")
         return 100  # EDITING_PRICE
@@ -1735,10 +1790,78 @@ async def admin_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Старая функция черного списка (заглушка)"""
     await admin_blacklist_menu(update, context)
 
+async def admin_referral_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика реферальной системы для админа"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    conn = db.get_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Общая статистика
+        cur.execute('SELECT COUNT(*) FROM users WHERE referral_code IS NOT NULL')
+        total_with_codes = cur.fetchone()[0]
+        
+        cur.execute('SELECT COUNT(*) FROM referrals')
+        total_referrals = cur.fetchone()[0]
+        
+        cur.execute('SELECT COUNT(*) FROM referrals WHERE rewarded = TRUE')
+        rewarded = cur.fetchone()[0]
+        
+        cur.execute('SELECT SUM(amount) FROM referral_earnings')
+        total_points = cur.fetchone()[0] or 0
+        
+        cur.execute('SELECT SUM(amount) FROM referral_spendings')
+        spent_points = cur.fetchone()[0] or 0
+        
+        text = (
+            "📊 <b>РЕФЕРАЛЬНАЯ СТАТИСТИКА</b>\n\n"
+            f"👥 Пользователей с кодами: {total_with_codes}\n"
+            f"🔗 Всего рефералов: {total_referrals}\n"
+            f"✅ Активировано заказами: {rewarded}\n"
+            f"💰 Всего начислено баллов: {total_points}\n"
+            f"💸 Потрачено баллов: {spent_points}\n"
+            f"📈 В обороте: {total_points - spent_points}\n\n"
+        )
+        
+        # Топ-5 рефералов
+        cur.execute('''
+            SELECT u.first_name, u.username, u.total_earned
+            FROM users u
+            WHERE u.total_earned > 0
+            ORDER BY u.total_earned DESC
+            LIMIT 5
+        ''')
+        
+        text += "<b>🏆 Топ-5 рефералов:</b>\n"
+        top = cur.fetchall()
+        if top:
+            for i, row in enumerate(top, 1):
+                name = row[0] or f"@{row[1]}" if row[1] else "Пользователь"
+                text += f"{i}. {name} — {row[2]} баллов\n"
+        else:
+            text += "Пока нет данных\n"
+        
+    except Exception as e:
+        text = f"❌ Ошибка загрузки статистики: {e}"
+        print(f"Ошибка в admin_referral_stats: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='admin')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия admin_panel для reply-кнопок"""
+    """Версия admin_panel для обычных сообщений (с клавиатурой)"""
     user_id = update.effective_user.id
     
     if user_id not in admin_data['admins']:
@@ -1767,10 +1890,46 @@ async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
         f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
         f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
-        f"<b>Выберите раздел в меню ниже:</b>"
+        f"<b>Выберите раздел:</b>"
     )
     
-    await update.message.reply_text(text, parse_mode='HTML')
+    # КОМПАКТНАЯ КЛАВИАТУРА (ПО 2 КНОПКИ В РЯДУ)
+    keyboard = [
+        [
+            InlineKeyboardButton("📦 Заказы", callback_data='admin_orders'),
+            InlineKeyboardButton("👥 Клиенты", callback_data='admin_clients')
+        ],
+        [
+            InlineKeyboardButton("💬 Сообщения", callback_data='admin_messages'),
+            InlineKeyboardButton("📢 Написать", callback_data='admin_write_to_user')
+        ],
+        [
+            InlineKeyboardButton("💰 Цены", callback_data='admin_prices_menu'),
+            InlineKeyboardButton("⏰ Время", callback_data='admin_working_hours')
+        ],
+        [
+            InlineKeyboardButton("📢 Рассылка", callback_data='admin_broadcast'),
+            InlineKeyboardButton("🚫 ЧС", callback_data='admin_blacklist')
+        ],
+        [
+            InlineKeyboardButton("📊 Статистика", callback_data='admin_stats'),
+            InlineKeyboardButton("🧪 Тест", callback_data='toggle_test_mode')
+        ],
+        [
+            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export'),
+            InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')
+        ],
+        [
+            InlineKeyboardButton("🚪 Выйти", callback_data='admin_logout'),
+            InlineKeyboardButton("◀️ Меню", callback_data='back_to_menu')
+        ]
+    ]
+    
+    await update.message.reply_text(
+        text, 
+        parse_mode='HTML', 
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def admin_orders_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия admin_orders для reply-кнопок"""

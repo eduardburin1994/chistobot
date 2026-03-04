@@ -3,6 +3,7 @@ import os
 import logging
 from telegram.warnings import PTBUserWarning
 import warnings
+import database as db
 
 # Токен бота - читаем из переменной окружения (ВАЖНО: имя должно совпадать с Render!)
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8730099509:AAF83M1EjAqwB7FErvaRXJUPKaP-1kREv8I')
@@ -17,7 +18,7 @@ YOOKASSA_RETURN_URL = 'https://t.me/ваш_бот'
 
 # Данные администраторов
 admin_data = {
-    'prices': {'1': 100, '2': 140, '3+': 150},
+    'prices': db.load_prices(),  # ← загружаем из БД
     'admins': [MAIN_ADMIN_ID],
     'blacklist': [],
     'blocked_users': [],

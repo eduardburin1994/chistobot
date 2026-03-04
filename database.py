@@ -5,20 +5,592 @@ import psycopg2
 import psycopg2.extras
 from urllib.parse import urlparse
 
+# =============== РЕФЕРАЛЬНАЯ СИСТЕМА ===============
+
+import random
+import string
+
+def init_referral_tables():
+    """Создаёт таблицы для реферальной системы"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Добавляем поля в таблицу users
+        cur.execute('''
+            ALTER TABLE users 
+            ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS referred_by BIGINT,
+            ADD COLUMN IF NOT EXISTS referral_balance INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_earned INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS level1_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS level2_count INTEGER DEFAULT 0
+        ''')
+        
+        # Таблица реферальных связей
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS referrals (
+                referral_id SERIAL PRIMARY KEY,
+                referrer_id BIGINT,
+                referred_id BIGINT UNIQUE,
+                level INTEGER DEFAULT 1,
+                created_at TIMESTAMP,
+                first_order_id INTEGER,
+                rewarded BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (referrer_id) REFERENCES users (user_id),
+                FOREIGN KEY (referred_id) REFERENCES users (user_id),
+                FOREIGN KEY (first_order_id) REFERENCES orders (order_id)
+            )
+        ''')
+        
+        # Таблица начислений баллов
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS referral_earnings (
+                earning_id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                amount INTEGER,
+                source TEXT, -- 'level1', 'level2', 'bonus'
+                source_id INTEGER, -- ID реферала или заказа
+                created_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        ''')
+        
+        # Таблица использования баллов
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS referral_spendings (
+                spending_id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                amount INTEGER,
+                order_id INTEGER,
+                created_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id),
+                FOREIGN KEY (order_id) REFERENCES orders (order_id)
+            )
+        ''')
+        
+        conn.commit()
+        print("✅ Таблицы реферальной системы созданы")
+    except Exception as e:
+        print(f"❌ Ошибка создания таблиц рефералки: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def generate_referral_code(user_id):
+    """Генерирует уникальный реферальный код"""
+    # Формат: CHISTO + первые 4 буквы имени + случайные цифры
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Получаем имя пользователя
+        cur.execute('SELECT first_name FROM users WHERE user_id = %s', (user_id,))
+        user = cur.fetchone()
+        name_part = user[0][:4].upper() if user and user[0] else "USER"
+        
+        # Генерируем уникальный код
+        while True:
+            random_part = ''.join(random.choices(string.digits, k=4))
+            code = f"CHISTO{name_part}{random_part}"
+            
+            # Проверяем уникальность
+            cur.execute('SELECT user_id FROM users WHERE referral_code = %s', (code,))
+            if not cur.fetchone():
+                return code
+    except Exception as e:
+        print(f"❌ Ошибка генерации кода: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_or_create_referral_code(user_id):
+    """Получает существующий или создаёт новый реферальный код"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем, есть ли уже код
+        cur.execute('SELECT referral_code FROM users WHERE user_id = %s', (user_id,))
+        result = cur.fetchone()
+        
+        if result and result[0]:
+            return result[0]
+        
+        # Создаём новый код
+        code = generate_referral_code(user_id)
+        if code:
+            cur.execute(
+                'UPDATE users SET referral_code = %s WHERE user_id = %s',
+                (code, user_id)
+            )
+            conn.commit()
+            return code
+        return None
+    except Exception as e:
+        print(f"❌ Ошибка получения кода: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def register_referral(referral_code, new_user_id):
+    """Регистрирует нового пользователя по реферальному коду"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        # Находим, кто пригласил
+        cur.execute(
+            'SELECT user_id FROM users WHERE referral_code = %s',
+            (referral_code,)
+        )
+        referrer = cur.fetchone()
+        
+        if not referrer:
+            return None
+        
+        referrer_id = referrer[0]
+        
+        # Не даём регистрировать самого себя
+        if referrer_id == new_user_id:
+            return None
+        
+        # Проверяем, не зарегистрирован ли уже этот пользователь
+        cur.execute(
+            'SELECT * FROM referrals WHERE referred_id = %s',
+            (new_user_id,)
+        )
+        if cur.fetchone():
+            return None
+        
+        # Регистрируем реферала 1 уровня
+        cur.execute('''
+            INSERT INTO referrals (referrer_id, referred_id, level, created_at)
+            VALUES (%s, %s, 1, %s)
+            RETURNING referral_id
+        ''', (referrer_id, new_user_id, datetime.datetime.now()))
+        
+        referral_id = cur.fetchone()[0]
+        
+        # Обновляем счётчик у пригласившего
+        cur.execute('''
+            UPDATE users 
+            SET level1_count = level1_count + 1 
+            WHERE user_id = %s
+        ''', (referrer_id,))
+        
+        # Записываем, кто пригласил нового пользователя
+        cur.execute(
+            'UPDATE users SET referred_by = %s WHERE user_id = %s',
+            (referrer_id, new_user_id)
+        )
+        
+        conn.commit()
+        print(f"✅ Пользователь {new_user_id} пришёл по реферальному коду от {referrer_id}")
+        return referrer_id
+        
+    except Exception as e:
+        print(f"❌ Ошибка регистрации реферала: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def process_referral_reward(referrer_id, friend_id, order_id):
+    """Начисляет баллы за успешный заказ друга"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем, не начисляли ли уже баллы за этого друга
+        cur.execute('''
+            SELECT * FROM referrals 
+            WHERE referred_id = %s AND rewarded = TRUE
+        ''', (friend_id,))
+        
+        if cur.fetchone():
+            return
+        
+        # Начисляем баллы за реферала 1 уровня
+        cur.execute('''
+            UPDATE users 
+            SET referral_balance = referral_balance + 100,
+                total_earned = total_earned + 100
+            WHERE user_id = %s
+            RETURNING referral_balance
+        ''', (referrer_id,))
+        
+        new_balance = cur.fetchone()[0]
+        
+        # Записываем в историю начислений
+        cur.execute('''
+            INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
+            VALUES (%s, 100, 'level1', %s, %s)
+        ''', (referrer_id, friend_id, datetime.datetime.now()))
+        
+        # Отмечаем реферала как награждённого
+        cur.execute('''
+            UPDATE referrals 
+            SET rewarded = TRUE, first_order_id = %s 
+            WHERE referred_id = %s
+        ''', (order_id, friend_id))
+        
+        # Проверяем, не был ли пригласивший сам чьим-то рефералом (level 2)
+        cur.execute('SELECT referred_by FROM users WHERE user_id = %s', (referrer_id,))
+        level2_referrer = cur.fetchone()
+        
+        if level2_referrer and level2_referrer[0]:
+            level2_id = level2_referrer[0]
+            
+            # Начисляем баллы за реферала 2 уровня
+            cur.execute('''
+                UPDATE users 
+                SET referral_balance = referral_balance + 30,
+                    total_earned = total_earned + 30,
+                    level2_count = level2_count + 1
+                WHERE user_id = %s
+            ''', (level2_id,))
+            
+            # Записываем в историю
+            cur.execute('''
+                INSERT INTO referral_earnings (user_id, amount, source, source_id, created_at)
+                VALUES (%s, 30, 'level2', %s, %s)
+            ''', (level2_id, friend_id, datetime.datetime.now()))
+            
+            print(f"✅ Пользователь {level2_id} получил 30 баллов за реферала 2 уровня")
+        
+        conn.commit()
+        print(f"✅ Пользователь {referrer_id} получил 100 баллов за реферала {friend_id}")
+        print(f"💰 Новый баланс: {new_balance} баллов")
+        
+    except Exception as e:
+        print(f"❌ Ошибка начисления баллов: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_referral_stats(user_id):
+    """Получает статистику реферальной программы для пользователя"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                referral_code,
+                referral_balance,
+                total_earned,
+                level1_count,
+                level2_count
+            FROM users WHERE user_id = %s
+        ''', (user_id,))
+        
+        user_stats = cur.fetchone()
+        if not user_stats:
+            return None
+        
+        # Получаем последних 5 рефералов
+        cur.execute('''
+            SELECT 
+                u.first_name,
+                u.username,
+                r.created_at,
+                r.rewarded
+            FROM referrals r
+            JOIN users u ON r.referred_id = u.user_id
+            WHERE r.referrer_id = %s
+            ORDER BY r.created_at DESC
+            LIMIT 5
+        ''', (user_id,))
+        
+        recent = cur.fetchall()
+        
+        # Получаем историю начислений
+        cur.execute('''
+            SELECT amount, source, created_at
+            FROM referral_earnings
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 10
+        ''', (user_id,))
+        
+        earnings = cur.fetchall()
+        
+        return {
+            'code': user_stats[0],
+            'balance': user_stats[1],
+            'total_earned': user_stats[2],
+            'level1': user_stats[3],
+            'level2': user_stats[4],
+            'recent': recent,
+            'earnings': earnings
+        }
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def use_balance_for_order(user_id, order_id, amount):
+    """Списывает баллы при оплате заказа"""
+    conn = get_connection()
+    if not conn:
+        return False
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем баланс
+        cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
+        balance = cur.fetchone()[0]
+        
+        if balance < amount:
+            return False
+        
+        # Списываем баллы
+        cur.execute('''
+            UPDATE users 
+            SET referral_balance = referral_balance - %s 
+            WHERE user_id = %s
+        ''', (amount, user_id))
+        
+        # Записываем трату
+        cur.execute('''
+            INSERT INTO referral_spendings (user_id, amount, order_id, created_at)
+            VALUES (%s, %s, %s, %s)
+        ''', (user_id, amount, order_id, datetime.datetime.now()))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка списания баллов: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
 # Получаем строку подключения из переменной окружения
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-def get_connection():
-    """Возвращает подключение к PostgreSQL"""
-    if not DATABASE_URL:
-        print("❌ DATABASE_URL не найден в переменных окружения!")
-        return None
+def save_prices(prices):
+    """Сохраняет цены в БД"""
+    conn = get_connection()
+    if not conn:
+        return
     
+    cur = conn.cursor()
     try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        # Создаём таблицу для цен, если её нет
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS prices (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                price_1 INTEGER,
+                price_2 INTEGER,
+                price_3 TEXT
+            )
+        ''')
+        
+        # Вставляем или обновляем цены
+        cur.execute('''
+            INSERT INTO prices (id, price_1, price_2, price_3)
+            VALUES (1, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE 
+            SET price_1 = EXCLUDED.price_1,
+                price_2 = EXCLUDED.price_2,
+                price_3 = EXCLUDED.price_3
+        ''', (prices['1'], prices['2'], prices['3+']))
+        
+        conn.commit()
+        print("✅ Цены сохранены в БД")
+    except Exception as e:
+        print(f"❌ Ошибка сохранения цен: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def load_prices():
+    """Загружает цены из БД"""
+    conn = get_connection()
+    if not conn:
+        return {'1': 100, '2': 140, '3+': 150}
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT price_1, price_2, price_3 FROM prices WHERE id = 1')
+        result = cur.fetchone()
+        
+        if result:
+            return {
+                '1': result[0],
+                '2': result[1],
+                '3+': result[2]  # ← ПРОВЕРЬ ЭТО ЗНАЧЕНИЕ
+            }
+        else:
+            return {'1': 100, '2': 140, '3+': 150}
+    except Exception as e:
+        print(f"❌ Ошибка загрузки цен: {e}")
+        return {'1': 100, '2': 140, '3+': 150}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def delete_all_user_messages(user_id):
+    """Помечает все сообщения пользователя как удалённые"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE messages SET status = 'deleted' WHERE user_id = %s",
+            (user_id,)
+        )
+        conn.commit()
+        print(f"✅ Все сообщения пользователя {user_id} помечены как удалённые")
+    except Exception as e:
+        print(f"❌ Ошибка удаления сообщений: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def check_messages_exists(user_id):
+    """Проверяет, есть ли сообщения для пользователя"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем все сообщения без условий
+        cur.execute("SELECT COUNT(*) FROM messages WHERE user_id = %s", (user_id,))
+        count = cur.fetchone()[0]
+        print(f"🔍 Всего сообщений для user {user_id}: {count}")
+        
+        if count > 0:
+            # Покажем первые несколько
+            cur.execute("SELECT * FROM messages WHERE user_id = %s LIMIT 3", (user_id,))
+            rows = cur.fetchall()
+            for row in rows:
+                print(f"🔍 Сообщение: {row}")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def debug_messages_table():
+    """Выводит структуру таблицы messages"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Получаем список колонок
+        cur.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'messages' ORDER BY ordinal_position")
+        columns = cur.fetchall()
+        print("📋 СТРУКТУРА ТАБЛИЦЫ messages:")
+        for i, col in enumerate(columns):
+            print(f"   {i}: {col[0]} ({col[1]})")
+        
+        # Проверяем, есть ли данные
+        cur.execute("SELECT COUNT(*) FROM messages")
+        count = cur.fetchone()[0]
+        print(f"📊 Всего записей: {count}")
+        
+        if count > 0:
+            cur.execute("SELECT * FROM messages LIMIT 1")
+            sample = cur.fetchone()
+            print(f"🔍 Пример записи: {sample}")
+            print(f"🔍 Длина кортежа: {len(sample)}")
+    except Exception as e:
+        print(f"❌ Ошибка при отладке: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def reset_messages_table():
+    """Удаляет и пересоздаёт таблицу messages"""
+    conn = get_connection()
+    if not conn:
+        print("❌ Нет подключения к БД")
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Удаляем существующую таблицу
+        cur.execute('DROP TABLE IF EXISTS messages CASCADE')
+        print("✅ Таблица messages удалена")
+        
+        # Создаём новую с правильной структурой
+        cur.execute('''
+            CREATE TABLE messages (
+                message_id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                user_message TEXT,
+                admin_reply TEXT,
+                status TEXT DEFAULT 'new',
+                is_important BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP,
+                replied_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        ''')
+        print("✅ Таблица messages создана заново")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Ошибка при сбросе таблицы: {e}")
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+
+def check_database_integrity():
+    """Проверка целостности базы данных"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        # Проверяем все текстовые поля на наличие битых символов
+        tables = ['users', 'orders', 'messages', 'favorite_addresses']
+        for table in tables:
+            cur.execute(f"SELECT * FROM {table} LIMIT 1")
+            print(f"✅ Таблица {table} доступна")
+    except Exception as e:
+        print(f"❌ Ошибка при проверке таблицы {table}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+        
+def get_connection():
+    if not DATABASE_URL:
+        print("❌ DATABASE_URL не найден!")
+        return None
+    try:
+        # Добавьте таймаут и обработку ошибок
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=10)
         return conn
     except Exception as e:
-        print(f"❌ Ошибка подключения к БД: {e}")
+        print(f"❌ Ошибка подключения: {e}")
         return None
         
 def delete_order(order_id):
@@ -984,3 +1556,317 @@ def get_all_broadcasts():
 if __name__ != '__main__':
     init_db()
     print("✅ База данных инициализирована при импорте")
+# =============== НОВЫЕ ФУНКЦИИ ДЛЯ МИНИ-МЕССЕНДЖЕРА ===============
+
+def get_dialogs(filter_type='all'):
+    """
+    Получает список диалогов с последними сообщениями
+    filter_type: 'all', 'new', 'important', 'outbox'
+    """
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        # Получаем все диалоги с последним сообщением и количеством непрочитанных
+        query = '''
+            SELECT DISTINCT ON (m.user_id) 
+                m.user_id,
+                u.first_name,
+                u.username,
+                m.user_message as last_message,
+                m.created_at as last_time,
+                (SELECT COUNT(*) FROM messages WHERE user_id = m.user_id AND status = 'new') as unread_count,
+                CASE WHEN b.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_blocked
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            LEFT JOIN blacklist b ON m.user_id = b.user_id
+            WHERE m.status != 'deleted'
+        '''
+        
+        if filter_type == 'new':
+            query += ' AND (SELECT COUNT(*) FROM messages WHERE user_id = m.user_id AND status = \'new\') > 0'
+        elif filter_type == 'important':
+            query += ' AND m.is_important = TRUE'
+        elif filter_type == 'outbox':
+            query += " AND m.user_message LIKE '[ОТ АДМИНА]%'"
+        
+        query += ' ORDER BY m.user_id, m.created_at DESC'
+        
+        cur.execute(query)
+        dialogs = cur.fetchall()
+        return dialogs
+    except Exception as e:
+        print(f"❌ Ошибка получения диалогов: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def get_dialog_messages(user_id, limit=20):
+    """Получает историю сообщений с пользователем"""
+    print(f"🔍 ВХОД В get_dialog_messages для user {user_id}")
+    
+    conn = get_connection()
+    if not conn:
+        print("❌ Нет подключения к БД")
+        return []
+    
+    cur = conn.cursor()
+    try:
+        print(f"🔍 Выполняем запрос для user {user_id}")
+        
+        # Запрос под вашу структуру таблицы
+        cur.execute('''
+            SELECT 
+                message_id,
+                user_id,
+                user_message,
+                admin_reply,
+                status,
+                is_important,
+                created_at,
+                replied_at
+            FROM messages 
+            WHERE user_id = %s AND status != 'deleted'
+            ORDER BY created_at DESC
+            LIMIT %s
+        ''', (user_id, limit))
+        
+        messages = cur.fetchall()
+        print(f"🔍 Найдено сообщений: {len(messages)}")
+        
+        # Преобразуем в удобный формат
+        result = []
+        for msg in messages:
+            # msg: (message_id, user_id, user_message, admin_reply, status, is_important, created_at, replied_at)
+            is_from_admin = msg[2] and msg[2].startswith('[ОТ АДМИНА]') if msg[2] else False
+            is_read = (msg[4] == 'replied')
+            
+            # Текст сообщения (если от админа, убираем префикс)
+            text = msg[2]
+            if is_from_admin and text:
+                text = text.replace('[ОТ АДМИНА] ', '', 1)
+            
+            result.append({
+                'id': msg[0],
+                'user_id': msg[1],
+                'from_admin': is_from_admin,
+                'text': text,
+                'admin_reply': msg[3],
+                'status': msg[4],
+                'is_important': msg[5],
+                'time': msg[6],
+                'replied_at': msg[7],
+                'is_read': is_read
+            })
+        
+        if result:
+            print(f"🔍 Первое сообщение после обработки: {result[0]}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ ОШИБКА в get_dialog_messages: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def mark_dialog_as_read(user_id):
+    """Отмечает все сообщения пользователя как прочитанные"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            UPDATE messages 
+            SET status = 'replied' 
+            WHERE user_id = %s AND status = 'new'
+        ''', (user_id,))
+        conn.commit()
+        print(f"✅ Диалог с {user_id} отмечен как прочитанный")
+    except Exception as e:
+        print(f"❌ Ошибка отметки диалога: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def mark_message_as_read(message_id):
+    """Отмечает конкретное сообщение как прочитанное"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE messages SET status = 'replied' WHERE message_id = %s", (message_id,))
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} отмечено как прочитанное")
+    except Exception as e:
+        print(f"❌ Ошибка отметки сообщения: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def delete_message(message_id, permanent=False):
+    """Удаляет сообщение (в корзину или навсегда)"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        if permanent:
+            cur.execute('DELETE FROM messages WHERE message_id = %s', (message_id,))
+        else:
+            cur.execute("UPDATE messages SET status = 'deleted' WHERE message_id = %s", (message_id,))  # ← ИСПРАВЛЕНО
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} удалено")
+    except Exception as e:
+        print(f"❌ Ошибка удаления сообщения: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def restore_message(message_id):
+    """Восстанавливает сообщение из корзины"""
+    conn = get_connection()
+    if not conn:
+        return
+    
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE messages SET status = 'new' WHERE message_id = %s", (message_id,))  # ← ИСПРАВЛЕНО
+        conn.commit()
+        print(f"✅ Сообщение #{message_id} восстановлено")
+    except Exception as e:
+        print(f"❌ Ошибка восстановления сообщения: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+def get_deleted_messages():
+    """Получает сообщения в корзине"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                m.message_id,
+                m.user_id,
+                u.first_name,
+                m.user_message,
+                m.created_at
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            WHERE m.status = 'deleted'
+            ORDER BY m.created_at DESC
+            LIMIT 20
+        ''')
+        messages = cur.fetchall()
+        return messages
+    except Exception as e:
+        print(f"❌ Ошибка получения корзины: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+def save_admin_message(user_id, message_text):
+    """Сохраняет ответ администратора"""
+    conn = get_connection()
+    if not conn:
+        return None
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            INSERT INTO messages (user_id, user_message, status, created_at)
+            VALUES (%s, %s, 'replied', %s)
+            RETURNING message_id
+        ''', (user_id, f"[ОТ АДМИНА] {message_text}", datetime.datetime.now()))
+        message_id = cur.fetchone()[0]
+        conn.commit()
+        print(f"✅ Ответ администратора #{message_id} сохранён")
+        return message_id
+    except Exception as e:
+        print(f"❌ Ошибка сохранения ответа: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+def get_total_unread_messages():
+    """Получает общее количество непрочитанных сообщений (не удалённых)"""
+    conn = get_connection()
+    if not conn:
+        return 0
+    
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM messages WHERE status = 'new' AND status != 'deleted'")
+        count = cur.fetchone()[0]
+        return count
+    except Exception as e:
+        print(f"❌ Ошибка подсчёта непрочитанных: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+def get_dialogs_count():
+    """Получает количество диалогов (только с не удалёнными сообщениями)"""
+    conn = get_connection()
+    if not conn:
+        return 0
+    
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(DISTINCT user_id) FROM messages WHERE status != 'deleted'")
+        count = cur.fetchone()[0]
+        return count
+    except Exception as e:
+        print(f"❌ Ошибка подсчёта диалогов: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+def search_messages(search_text):
+    """Поиск сообщений по тексту"""
+    conn = get_connection()
+    if not conn:
+        return []
+    
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT 
+                m.message_id,
+                m.user_id,
+                COALESCE(u.first_name, u.username, 'Пользователь') as user_name,
+                m.user_message,
+                m.created_at
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.user_id
+            WHERE m.user_message ILIKE %s AND m.status != 'deleted'
+            ORDER BY m.created_at DESC
+            LIMIT 20
+        ''', (f'%{search_text}%',))
+        messages = cur.fetchall()
+        return messages
+    except Exception as e:
+        print(f"❌ Ошибка поиска сообщений: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()

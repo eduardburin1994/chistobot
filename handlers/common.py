@@ -16,6 +16,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Полноценный обработчик команды /start"""
     user = update.effective_user
     
+    # Проверяем, есть ли реферальный код
+    args = context.args
+    if args and args[0].startswith('ref_'):
+        referral_code = args[0].replace('ref_', '')
+        # Регистрируем реферала
+        referrer_id = db.register_referral(referral_code, user.id)
+        if referrer_id:
+            await update.message.reply_text(
+                "🎉 Вы пришли по приглашению друга!\n"
+                "После первого заказа ваш друг получит 100 баллов."
+            )
+    
     # Проверяем, есть ли пользователь в базе
     user_info = db.get_user_by_id(user.id)
     
@@ -230,7 +242,7 @@ async def show_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"  <i>(курьер заберёт и утилизирует один пакет)</i>\n\n"
         f"• 🟡 <b>2 пакета</b> — {admin_data['prices']['2']} ₽\n"
         f"  <i>(за два пакета, включая вынос)</i>\n\n"
-        f"• 🔴 <b>3 и более пакетов</b> — {admin_data['prices']['3+']} ₽\n"
+        f"• 🔴 <b>3 и более пакетов</b> — {int(admin_data['prices']['3+'])} ₽\n"
         f"  <i>(фиксированная цена за весь объём)</i>\n\n"
         "⚠️ <b>Важно:</b> Общий вес всех пакетов не должен превышать 15 кг!\n\n"
         "📍 <b>Зона обслуживания:</b> Южный микрорайон (список улиц в разделе Правила)\n\n"
