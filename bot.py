@@ -75,6 +75,69 @@ async def button_handler(update: Update, context):
         await query.edit_message_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
 
+    # ========== ВРЕМЕННАЯ ОБРАБОТКА КНОПОК С ДАТАМИ ==========
+    if query.data.startswith('date_'):
+        print(f"🔥🔥🔥 ОБРАБОТКА ДАТЫ В button_handler: {query.data}")
+        
+        selected_date = query.data.replace('date_', '')
+        print(f"📅 Выбрана дата: {selected_date}")
+        
+        # Сохраняем дату в user_data
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['order_date'] = selected_date
+        
+        # Получаем доступные слоты
+        import database as db
+        available_slots, slot_info = db.get_available_slots(selected_date)
+        
+        print(f"📅 Доступные слоты: {available_slots}")
+        
+        if not available_slots:
+            # Если нет слотов
+            from keyboards.client_keyboards import create_date_keyboard
+            keyboard = create_date_keyboard()
+            await query.edit_message_text(
+                f"❌ На {selected_date} нет свободных слотов.\n"
+                f"Пожалуйста, выберите другую дату:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return DATE
+        
+        # Если слоты есть - показываем их
+        time_keyboard = []
+        for slot in available_slots:
+            time_keyboard.append([InlineKeyboardButton(slot, callback_data=f'time_{slot}')])
+        
+        await query.edit_message_text(
+            f"📅 Дата: {selected_date}\n\n"
+            f"⏰ Выберите удобное время:",
+            reply_markup=InlineKeyboardMarkup(time_keyboard)
+        )
+        return TIME
+    
+    # ========== ВРЕМЕННАЯ ОБРАБОТКА КНОПОК С ВРЕМЕНЕМ ==========
+    if query.data.startswith('time_'):
+        print(f"⏰ ОБРАБОТКА ВРЕМЕНИ В button_handler: {query.data}")
+        
+        selected_time = query.data.replace('time_', '')
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['order_time'] = selected_time
+        
+        # Показываем кнопки с мешками
+        from keyboards.client_keyboards import get_bags_keyboard
+        await query.edit_message_text(
+            f"📅 {user_data[user_id]['order_date']} {selected_time}\n\n"
+            f"🛍 Шаг 3: Сколько мешков нужно вынести?",
+            reply_markup=get_bags_keyboard()
+        )
+        return BAGS
+    # ===========================================================
+
     # Детали заказа
     if query.data.startswith('order_detail_'):
         await admin_order_detail(update, context)
@@ -637,36 +700,28 @@ async def main(set_webhook=True):
     
     # ====== 👆 ВСТАВИЛИ, ЕДЕМ ДАЛЬШЕ ======
     
-    # ========== ИСПРАВЛЕННЫЙ ПОРЯДОК ОБРАБОТЧИКОВ ==========
-    # Сначала добавляем команды
+    # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rules", rules_command))
-    app.add_handler(CommandHandler('cancel', cancel_command))
-    
-    # Затем ConversationHandler'ы (от самых специфичных к общим)
-    app.add_handler(welcome_handler)           # /start приветствие
-    app.add_handler(conv_handler)              # основной процесс заказа
-    app.add_handler(message_to_user_handler)    # отправка сообщений
-    app.add_handler(favorite_handler)           # добавление в избранное
-    app.add_handler(favorite_edit_handler)      # редактирование избранного
-    app.add_handler(blacklist_handler)          # черный список
-    app.add_handler(broadcast_handler)          # рассылки
-    app.add_handler(support_handler)            # поддержка
-    app.add_handler(price_edit_handler)         # редактирование цен
-    app.add_handler(working_hours_handler)      # время работы
-    app.add_handler(admin_login_handler)        # вход в админку
-    app.add_handler(dialog_reply_handler)       # ответы в диалогах
-    app.add_handler(messages_search_handler)    # поиск сообщений
-    
-    # Потом конкретные CallbackQueryHandler'ы с pattern
+    app.add_handler(welcome_handler)
+    app.add_handler(conv_handler)
+    app.add_handler(message_to_user_handler)
+    app.add_handler(favorite_handler)
+    app.add_handler(favorite_edit_handler)
+    app.add_handler(blacklist_handler)
+    app.add_handler(broadcast_handler)
+    app.add_handler(support_handler)
+    app.add_handler(price_edit_handler)
+    app.add_handler(working_hours_handler)
+    app.add_handler(admin_login_handler)  # ← ДОБАВЬ СЮДА
+    app.add_handler(dialog_reply_handler)
+    app.add_handler(messages_search_handler)
+    app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
     app.add_handler(CallbackQueryHandler(toggle_test_mode, pattern='^toggle_test_mode$'))
-    
-    # В КОНЦЕ - общий обработчик для всех остальных кнопок
-    app.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Обработчики сообщений
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
-    # =======================================================
+    
+    # Добавляем команду отмены
+    app.add_handler(CommandHandler('cancel', cancel_command))
     
     if set_webhook:
         # Режим polling (для локальной разработки)
