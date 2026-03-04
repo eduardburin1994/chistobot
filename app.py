@@ -41,27 +41,26 @@ async def telegram(request):
         # Получаем данные от Telegram
         body = await request.body()
         
+        # Логируем первые 200 символов для отладки
+        logger.info(f"🔍 Получены данные (первые 200): {body[:200]}")
+        
         # Пробуем декодировать с игнорированием ошибок
         try:
-            body_str = body.decode('utf-8')
+            body_str = body.decode('utf-8', errors='ignore')
+            logger.info(f"🔍 Декодированная строка: {body_str[:200]}")
             update_data = json.loads(body_str)
-        except UnicodeDecodeError:
-            # Если не получается, пробуем другие кодировки
-            try:
-                body_str = body.decode('cp1251')
-                update_data = json.loads(body_str)
-            except:
-                # В крайнем случае игнорируем проблемные символы
-                body_str = body.decode('utf-8', errors='ignore')
-                update_data = json.loads(body_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Ошибка парсинга JSON: {e}")
+            return Response(status_code=400)
         
         # Безопасно логируем полученное обновление
         if 'message' in update_data:
-            # Проверяем, есть ли username
             user_from = update_data['message'].get('from', {})
             username = user_from.get('username', 'нет username')
             first_name = user_from.get('first_name', '')
             logger.info(f"📩 Получено сообщение от {first_name} (@{username})")
+        elif 'callback_query' in update_data:
+            logger.info(f"🔘 Получен callback: {update_data['callback_query'].get('data', 'нет данных')}")
         
         # Передаём обновление боту
         from telegram import Update
