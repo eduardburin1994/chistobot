@@ -1508,7 +1508,7 @@ async def show_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Просмотр всех сообщений от клиентов"""
+    """Главное меню сообщений (мини-мессенджер)"""
     query = update.callback_query
     await query.answer()
     
@@ -1516,35 +1516,33 @@ async def admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⛔ Доступ запрещён")
         return
     
-    messages = db.get_all_messages()
+    # Получаем статистику из базы данных
+    import database as db
+    total_new = db.get_total_unread_messages()
+    dialogs_count = db.get_dialogs_count()
     
-    if not messages:
-        await query.edit_message_text(
-            "📭 Нет сообщений от клиентов",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')
-            ]])
-        )
-        return
-    
-    text = "💬 <b>Сообщения от клиентов:</b>\n\n"
-    
-    for msg in messages[:10]:
-        # msg: (id, user_id, username, first_name, phone, user_msg, reply, status, created)
-        msg_id, user_id, username, first_name, phone, user_msg, reply, status, created = msg
-        
-        status_emoji = "🆕" if status == 'new' else "✅"
-        username_text = f"@{username}" if username else first_name
-        
-        # Обрезаем длинные сообщения
-        short_msg = user_msg[:50] + "..." if len(user_msg) > 50 else user_msg
-        
-        text += f"{status_emoji} <b>#{msg_id}</b> от {username_text}\n"
-        text += f"📝 {short_msg}\n"
-        text += f"📅 {created}\n\n"
+    text = (
+        "💬 <b>ЦЕНТР СООБЩЕНИЙ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"📥 Новых сообщений: {total_new}\n"
+        f"👥 Диалогов: {dialogs_count}\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Выберите раздел:"
+    )
     
     keyboard = [
-        [InlineKeyboardButton("📋 Подробнее", callback_data='admin_messages_all')],
+        [
+            InlineKeyboardButton("📥 Все диалоги", callback_data='admin_dialogs_all'),
+            InlineKeyboardButton("🆕 Новые", callback_data='admin_dialogs_new')
+        ],
+        [
+            InlineKeyboardButton("⭐ Важные", callback_data='admin_dialogs_important'),
+            InlineKeyboardButton("📤 Исходящие", callback_data='admin_dialogs_outbox')
+        ],
+        [
+            InlineKeyboardButton("🔍 Поиск", callback_data='admin_messages_search'),
+            InlineKeyboardButton("🗑 Корзина", callback_data='admin_messages_trash')
+        ],
         [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
     ]
     
