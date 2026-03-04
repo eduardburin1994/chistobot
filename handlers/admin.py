@@ -1737,7 +1737,7 @@ async def admin_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Версия admin_panel для reply-кнопок"""
+    """Версия admin_panel для обычных сообщений (с клавиатурой)"""
     user_id = update.effective_user.id
     
     if user_id not in admin_data['admins']:
@@ -1766,10 +1766,46 @@ async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 1 пакет: {admin_data['prices']['1']} ₽\n"
         f"• 2 пакета: {admin_data['prices']['2']} ₽\n"
         f"• 3+ пакетов: {admin_data['prices']['3+']} ₽/мешок\n\n"
-        f"<b>Выберите раздел в меню ниже:</b>"
+        f"<b>Выберите раздел:</b>"
     )
     
-    await update.message.reply_text(text, parse_mode='HTML')
+    # КОМПАКТНАЯ КЛАВИАТУРА (ПО 2 КНОПКИ В РЯДУ)
+    keyboard = [
+        [
+            InlineKeyboardButton("📦 Заказы", callback_data='admin_orders'),
+            InlineKeyboardButton("👥 Клиенты", callback_data='admin_clients')
+        ],
+        [
+            InlineKeyboardButton("💬 Сообщения", callback_data='admin_messages'),
+            InlineKeyboardButton("📢 Написать", callback_data='admin_write_to_user')
+        ],
+        [
+            InlineKeyboardButton("💰 Цены", callback_data='admin_prices_menu'),
+            InlineKeyboardButton("⏰ Время", callback_data='admin_working_hours')
+        ],
+        [
+            InlineKeyboardButton("📢 Рассылка", callback_data='admin_broadcast'),
+            InlineKeyboardButton("🚫 ЧС", callback_data='admin_blacklist')
+        ],
+        [
+            InlineKeyboardButton("📊 Статистика", callback_data='admin_stats'),
+            InlineKeyboardButton("🧪 Тест", callback_data='toggle_test_mode')
+        ],
+        [
+            InlineKeyboardButton("📈 Экспорт", callback_data='admin_export'),
+            InlineKeyboardButton("⚙️ Настройки", callback_data='admin_settings')
+        ],
+        [
+            InlineKeyboardButton("🚪 Выйти", callback_data='admin_logout'),
+            InlineKeyboardButton("◀️ Меню", callback_data='back_to_menu')
+        ]
+    ]
+    
+    await update.message.reply_text(
+        text, 
+        parse_mode='HTML', 
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def admin_orders_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия admin_orders для reply-кнопок"""
