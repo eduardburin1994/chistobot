@@ -586,7 +586,6 @@ async def main(set_webhook=True):
     # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("rules", rules_command))
-    app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(welcome_handler)
     app.add_handler(conv_handler)
     app.add_handler(message_to_user_handler)
