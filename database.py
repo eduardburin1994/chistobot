@@ -1367,14 +1367,14 @@ def save_admin_message(user_id, message_text):
         conn.close()
 
 def get_total_unread_messages():
-    """Получает общее количество непрочитанных сообщений"""
+    """Получает общее количество непрочитанных сообщений (не удалённых)"""
     conn = get_connection()
     if not conn:
         return 0
     
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM messages WHERE status = 'new'")  # ← ИСПРАВЛЕНО
+        cur.execute("SELECT COUNT(*) FROM messages WHERE status = 'new' AND status != 'deleted'")
         count = cur.fetchone()[0]
         return count
     except Exception as e:
