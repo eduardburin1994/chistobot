@@ -345,7 +345,7 @@ async def button_handler(update: Update, context):
     if query.data == 'toggle_test_mode':
         await toggle_test_mode(update, context)
         return ConversationHandler.END
-        # ============= МИНИ-МЕССЕНДЖЕР =============
+    # ============= МИНИ-МЕССЕНДЖЕР =============
     # Список диалогов
     if query.data.startswith('admin_dialogs_'):
         await admin_dialogs_list(update, context)
@@ -366,14 +366,14 @@ async def button_handler(update: Update, context):
         await admin_dialog_mark_read(update, context)
         return DIALOG_VIEW
     
+    # Подтверждение удаления (ДОЛЖНО БЫТЬ ПЕРВЫМ!)
+    if query.data.startswith('dialog_delete_confirm_'):
+        await admin_dialog_delete_confirm(update, context)
+        return DIALOG_VIEW
+    
     # Удалить диалог
     if query.data.startswith('dialog_delete_'):
         await admin_dialog_delete(update, context)
-        return DIALOG_VIEW
-    
-    # Подтверждение удаления
-    if query.data.startswith('dialog_delete_confirm_'):
-        await admin_dialog_delete_confirm(update, context)
         return DIALOG_VIEW
     
     # Показать телефон
