@@ -941,7 +941,9 @@ def is_within_working_hours(slot_time):
 def is_slot_expired(slot_date, slot_time):
     """
     Проверяет, истёк ли слот.
-    Слот считается истекшим, если текущее время > начало слота + 1 час 15 минут
+    Слот считается истекшим, если:
+    - Текущее время > время начала слота + 1 час 15 минут (для слотов, которые ещё идут)
+    - ИЛИ текущее время > время окончания слота (для слотов, которые уже завершились)
     """
     try:
         now = datetime.datetime.now()
@@ -950,18 +952,29 @@ def is_slot_expired(slot_date, slot_time):
         day, month, year = map(int, slot_date.split('.'))
         slot_datetime = datetime.datetime(year, month, day)
         
-        # Парсим время начала слота
-        start_time_str = slot_time.split('-')[0]
+        # Парсим время начала и окончания слота
+        start_time_str, end_time_str = slot_time.split('-')
         start_hour, start_minute = map(int, start_time_str.split(':'))
+        end_hour, end_minute = map(int, end_time_str.split(':'))
         
-        # Устанавливаем время начала слота
+        # Устанавливаем время начала и окончания слота
         slot_start = slot_datetime.replace(hour=start_hour, minute=start_minute, second=0)
+        slot_end = slot_datetime.replace(hour=end_hour, minute=end_minute, second=0)
         
-        # Добавляем 1 час 15 минут к началу слота
+        # Если слот уже закончился (текущее время > время окончания)
+        if now > slot_end:
+            print(f"⏰ Слот {slot_time} закончился в {slot_end.strftime('%H:%M')}")
+            return True
+        
+        # Если слот ещё идёт, но прошло больше 1 часа 15 минут с начала
         expiry_time = slot_start + datetime.timedelta(hours=1, minutes=15)
+        if now > expiry_time:
+            print(f"⏰ Слот {slot_time} истёк по таймауту (прошло >1ч15м с начала)")
+            return True
         
-        # Если текущее время больше expiry_time, слот истёк
-        return now > expiry_time
+        # Слот доступен
+        return False
+        
     except Exception as e:
         print(f"❌ Ошибка при проверке истечения слота: {e}")
         return True  # В случае ошибки считаем слот истёкшим для безопасности
@@ -987,9 +1000,10 @@ def get_available_slots(date):
             if not is_within_working_hours(slot):
                 continue
             
-            # Проверяем, истёк ли слот
+            # Проверяем, истёк ли слот (используем обновлённую функцию)
             if is_slot_expired(date, slot):
-                continue  # Пропускаем истекшие слоты
+                print(f"⏰ Слот {slot} на дату {date} исключён (истёк)")
+                continue
             
             # Получаем количество занятых мест
             cur.execute(
@@ -1002,6 +1016,7 @@ def get_available_slots(date):
             if free_places > 0:
                 available_slots.append(slot)
                 slot_info[slot] = free_places
+                print(f"✅ Слот {slot} доступен ({free_places} мест)")
         
         return available_slots, slot_info
     except Exception as e:

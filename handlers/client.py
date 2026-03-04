@@ -538,22 +538,23 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = query.from_user.id
     print(f"📅 date_callback для пользователя {user_id}")
-    print(f"📅 Данные пользователя: {user_data.get(user_id, {})}")
     
     # Проверяем, есть ли данные пользователя
     if user_id not in user_data:
-        print(f"⚠️ Нет данных для пользователя {user_id}, создаем новые")
+        print(f"⚠️ Нет данных для пользователя {user_id}")
         user_data[user_id] = {}
     
     selected_date = query.data.replace('date_', '')
     user_data[user_id]['order_date'] = selected_date
     print(f"📅 Выбрана дата: {selected_date}")
+    print(f"🕐 Текущее время: {datetime.datetime.now().strftime('%H:%M:%S')}")
     
-    # Получаем доступные слоты с учётом истекших и рабочего времени
+    # Получаем доступные слоты с учётом истекших
     import database as db
     available_slots, slot_info = db.get_available_slots(selected_date)
     
     print(f"📅 Доступные слоты после фильтрации: {available_slots}")
+    print(f"📊 Информация о слотах: {slot_info}")
     
     # Упрощённая клавиатура — только названия слотов
     time_keyboard = []
@@ -572,15 +573,11 @@ async def date_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return DATE
     
     print(f"✅ Отправляем клавиатуру с {len(available_slots)} слотами")
-    try:
-        await query.edit_message_text(
-            f"📅 Дата: {selected_date}\n\n"
-            f"⏰ Выберите удобное время:",
-            reply_markup=InlineKeyboardMarkup(time_keyboard)
-        )
-    except Exception as e:
-        if "Message is not modified" not in str(e):
-            print(f"Ошибка в date_callback: {e}")
+    await query.edit_message_text(
+        f"📅 Дата: {selected_date}\n\n"
+        f"⏰ Выберите удобное время:",
+        reply_markup=InlineKeyboardMarkup(time_keyboard)
+    )
     return TIME
 
 async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
