@@ -1,4 +1,5 @@
 # handlers/admin.py
+import html  # добавь в начале файла
 from config import admin_data, WORK_HOURS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
@@ -383,7 +384,9 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 date_str = date.strftime("%d.%m.%Y")
             else:
                 date_str = "неизвестно"
-            text += f"• {date_str}: {msg[:30]}... ({count} пол.)\n"
+            # Экранируем HTML в сообщении
+            safe_msg = html.escape(msg[:30])
+            text += f"• {date_str}: {safe_msg}... ({count} пол.)\n"
         text += "\n"
     
     text += "Выберите действие:"
@@ -391,7 +394,7 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📨 Сделать рассылку", callback_data='broadcast_new')],
         [InlineKeyboardButton("📋 История рассылок", callback_data='broadcast_history')],
-        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]  # ← Кнопка назад
+        [InlineKeyboardButton("◀️ Назад в админку", callback_data='admin')]
     ]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
