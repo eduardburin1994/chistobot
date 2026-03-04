@@ -75,27 +75,24 @@ async def button_handler(update: Update, context):
         await query.edit_message_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
 
-    # ========== ВРЕМЕННАЯ ОБРАБОТКА КНОПОК С ДАТАМИ ==========
+    # ========== 1. ОБРАБОТКА ДАТ ==========
     if query.data.startswith('date_'):
         print(f"🔥🔥🔥 ОБРАБОТКА ДАТЫ В button_handler: {query.data}")
         
         selected_date = query.data.replace('date_', '')
         print(f"📅 Выбрана дата: {selected_date}")
         
-        # Сохраняем дату в user_data
         from config import user_data
         if user_id not in user_data:
             user_data[user_id] = {}
         user_data[user_id]['order_date'] = selected_date
         
-        # Получаем доступные слоты
         import database as db
         available_slots, slot_info = db.get_available_slots(selected_date)
         
         print(f"📅 Доступные слоты: {available_slots}")
         
         if not available_slots:
-            # Если нет слотов
             from keyboards.client_keyboards import create_date_keyboard
             keyboard = create_date_keyboard()
             await query.edit_message_text(
@@ -105,7 +102,6 @@ async def button_handler(update: Update, context):
             )
             return DATE
         
-        # Если слоты есть - показываем их
         time_keyboard = []
         for slot in available_slots:
             time_keyboard.append([InlineKeyboardButton(slot, callback_data=f'time_{slot}')])
@@ -116,8 +112,8 @@ async def button_handler(update: Update, context):
             reply_markup=InlineKeyboardMarkup(time_keyboard)
         )
         return TIME
-    
-    # ========== ВРЕМЕННАЯ ОБРАБОТКА КНОПОК С ВРЕМЕНЕМ ==========
+
+    # ========== 2. ОБРАБОТКА ВРЕМЕНИ ==========
     if query.data.startswith('time_'):
         print(f"⏰ ОБРАБОТКА ВРЕМЕНИ В button_handler: {query.data}")
         
@@ -128,7 +124,6 @@ async def button_handler(update: Update, context):
             user_data[user_id] = {}
         user_data[user_id]['order_time'] = selected_time
         
-        # Показываем кнопки с мешками
         from keyboards.client_keyboards import get_bags_keyboard
         await query.edit_message_text(
             f"📅 {user_data[user_id]['order_date']} {selected_time}\n\n"
@@ -136,7 +131,52 @@ async def button_handler(update: Update, context):
             reply_markup=get_bags_keyboard()
         )
         return BAGS
-    # ===========================================================
+
+    # ========== 3. ОБРАБОТКА КОЛИЧЕСТВА МЕШКОВ ==========
+    if query.data.startswith('bags_'):
+        print(f"🛍 ОБРАБОТКА МЕШКОВ В button_handler: {query.data}")
+        
+        bags_count = int(query.data.replace('bags_', ''))
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['bags_count'] = bags_count
+        
+        from keyboards.client_keyboards import get_payment_keyboard
+        await query.edit_message_text(
+            f"🛍 Выбрано: <b>{bags_count} мешков</b>\n\n"
+            f"💳 Шаг 4: Выберите способ оплаты",
+            parse_mode='HTML',
+            reply_markup=get_payment_keyboard()
+        )
+        return PAYMENT_METHOD
+
+    # ========== 4. ОБРАБОТКА ОПЛАТЫ ==========
+    if query.data.startswith('pay_'):
+        print(f"💳 ОБРАБОТКА ОПЛАТЫ В button_handler: {query.data}")
+        
+        payment_method = query.data.replace('pay_', '')
+        
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]['payment_method'] = payment_method
+        
+        # Показываем подтверждение заказа
+        from handlers.client import confirm_order_before_final
+        await confirm_order_before_final(update, context)
+        return CONFIRM_ORDER
+
+    # ========== 5. ПОДТВЕРЖДЕНИЕ ЗАКАЗА ==========
+    if query.data == 'final_confirm':
+        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")
+        from handlers.client import final_confirm_order
+        await final_confirm_order(update, context)
+        return ConversationHandler.END
+
+    # ========== 6. ВСЕ ОСТАЛЬНЫЕ ВАШИ КНОПКИ ==========
+    # (весь ваш существующий код с кнопками)
 
     # Детали заказа
     if query.data.startswith('order_detail_'):
@@ -148,7 +188,7 @@ async def button_handler(update: Update, context):
         await admin_panel(update, context)
         return ConversationHandler.END
     
-    if query.data == 'admin_logout':  # ← НОВАЯ КНОПКА
+    if query.data == 'admin_logout':
         await admin_logout(update, context)
         return ConversationHandler.END
     
@@ -162,7 +202,6 @@ async def button_handler(update: Update, context):
         await referral_info(update, context)
         return ConversationHandler.END
 
-    # Использование бонусов
     if query.data in ['use_bonus_yes', 'use_bonus_no']:
         await use_bonus_handler(update, context)
         return USE_BONUS
@@ -175,13 +214,11 @@ async def button_handler(update: Update, context):
         await referral_top(update, context)
         return ConversationHandler.END
 
-     # Реферальная статистика для админа
     if query.data == 'admin_referral_stats':
         await admin_referral_stats(update, context)
         return ConversationHandler.END
         
     if query.data == 'referral_help':
-        # Показываем справку
         help_text = (
             "❓ <b>Как работает реферальная программа?</b>\n\n"
             "1️⃣ <b>Получи ссылку</b> в разделе 'Приведи друга'\n"
@@ -200,18 +237,18 @@ async def button_handler(update: Update, context):
             ]])
         )
         return ConversationHandler.END
+
     # Повтор заказа
     if query.data.startswith('repeat_order_'):
         from handlers.client import repeat_order
         await repeat_order(update, context)
         return ConversationHandler.END
 
-    #    # ===== ИЗМЕНЕНИЕ АДРЕСА =====
+    # Изменение адреса
     if query.data == 'change_address':
         user_id = query.from_user.id
         print(f"🔄 Пользователь {user_id} изменяет адрес")
         
-        # Очищаем данные адреса, но оставляем имя и телефон
         if user_id in user_data:
             user_data[user_id].pop('street_address', None)
             user_data[user_id].pop('entrance', None)
@@ -223,15 +260,6 @@ async def button_handler(update: Update, context):
         from handlers.client import choose_address
         await choose_address(update, context)
         return SELECT_ADDRESS
-    # =============================
-    # ===============================
-
-    # Подтверждение заказа
-    if query.data == 'final_confirm':
-        print(f"🔍 НАЖАТА КНОПКА final_confirm для пользователя {user_id}")
-        from handlers.client import final_confirm_order
-        await final_confirm_order(update, context)
-        return ConversationHandler.END
     
     # Обработка кнопок приветствия
     if query.data in ['welcome_yes', 'welcome_no']:
@@ -299,10 +327,6 @@ async def button_handler(update: Update, context):
         await order_detail_select(update, context)
         return ConversationHandler.END
     
-    if query.data.startswith('order_detail_'):
-        await order_detail(update, context)
-        return ConversationHandler.END
-    
     # Кнопки избранных адресов
     if query.data == 'favorite_menu':
         await favorite_addresses_menu(update, context)
@@ -357,30 +381,24 @@ async def button_handler(update: Update, context):
         await new_address_start(update, context)
         return ConversationHandler.END
     
-    # Кнопки оплаты
+    # Кнопки оплаты (уже обработаны выше, но оставляем для совместимости)
     if query.data in ['pay_cash', 'pay_card', 'pay_yookassa']:
-        return await payment_method_handler(update, context)
+        # Уже обработано выше, но если сюда попало - игнорируем
+        return ConversationHandler.END
     
     if query.data == 'back_to_bags':
         await back_to_bags(update, context)
         return ConversationHandler.END
     
     # Кнопки админки
-    if query.data == 'admin':
-        await admin_panel(update, context)
-        return ConversationHandler.END
-    
-    # ===== ДОБАВЬ СЮДА =====
     if query.data == 'admin_write_to_user':
         await admin_write_to_user(update, context)
         return ConversationHandler.END
-    # ========================
     
     if query.data == 'admin_orders':
         await admin_orders(update, context)
         return ConversationHandler.END
     
-    # НОВЫЕ КНОПКИ ДЛЯ ЗАКАЗОВ (пагинация, фильтры, очистка)
     if query.data.startswith('orders_page_') or query.data.startswith('orders_filter_'):
         await admin_orders(update, context)
         return ConversationHandler.END
@@ -417,7 +435,6 @@ async def button_handler(update: Update, context):
         await blacklist_add_user(update, context)
         return ConversationHandler.END
     
-    # НОВАЯ КНОПКА: Удаление из черного списка
     if query.data == 'blacklist_remove_user':
         await blacklist_remove_user(update, context)
         return ConversationHandler.END
@@ -461,50 +478,41 @@ async def button_handler(update: Update, context):
     if query.data == 'toggle_test_mode':
         await toggle_test_mode(update, context)
         return ConversationHandler.END
+    
     # ============= МИНИ-МЕССЕНДЖЕР =============
-    # Список диалогов
     if query.data.startswith('admin_dialogs_'):
         await admin_dialogs_list(update, context)
         return ConversationHandler.END
     
-    # Открыть диалог
     if query.data.startswith('dialog_open_'):
         await admin_dialog_open(update, context)
         return DIALOG_VIEW
     
-    # Ответить в диалоге
     if query.data.startswith('dialog_reply_'):
         await admin_dialog_reply(update, context)
         return DIALOG_REPLY
     
-    # Отметить диалог как прочитанный
     if query.data.startswith('dialog_mark_read_'):
         await admin_dialog_mark_read(update, context)
         return DIALOG_VIEW
     
-    # Подтверждение удаления (ДОЛЖНО БЫТЬ ПЕРВЫМ!)
     if query.data.startswith('dialog_delete_confirm_'):
         await admin_dialog_delete_confirm(update, context)
         return DIALOG_VIEW
     
-    # Удалить диалог
     if query.data.startswith('dialog_delete_'):
         await admin_dialog_delete(update, context)
         return DIALOG_VIEW
     
-    # Показать телефон
     if query.data.startswith('show_phone_'):
         await admin_show_phone(update, context)
         return DIALOG_VIEW
     
-    # Поиск сообщений
     if query.data == 'admin_messages_search':
         await admin_messages_search(update, context)
         return SEARCH_MESSAGES
     
-    # Корзина сообщений
     if query.data == 'admin_messages_trash':
-        # Пока заглушка, потом реализуем
         await query.edit_message_text(
             "🗑 <b>Корзина</b>\n\nФункция в разработке",
             parse_mode='HTML',
