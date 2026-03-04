@@ -807,13 +807,13 @@ async def main(set_webhook=True):
     app.add_handler(CommandHandler('cancel', cancel_command))
 
     # Экспорт в Excel
-    app.add_handler(CallbackQueryHandler(admin_export_menu, pattern='^admin_export_menu$'))
-    app.add_handler(CallbackQueryHandler(export_orders, pattern='^export_orders$'))
-    app.add_handler(CallbackQueryHandler(export_orders_process, pattern='^export_orders_'))
-    app.add_handler(CallbackQueryHandler(export_clients, pattern='^export_clients$'))
-    app.add_handler(CallbackQueryHandler(export_stats, pattern='^export_stats$'))
-    app.add_handler(CallbackQueryHandler(export_blacklist, pattern='^export_blacklist$'))
-    app.add_handler(CallbackQueryHandler(export_messages, pattern='^export_messages$'))
+    #app.add_handler(CallbackQueryHandler(admin_export_menu, pattern='^admin_export_menu$'))
+    #app.add_handler(CallbackQueryHandler(export_orders, pattern='^export_orders$'))
+    #app.add_handler(CallbackQueryHandler(export_orders_process, pattern='^export_orders_'))
+    #app.add_handler(CallbackQueryHandler(export_clients, pattern='^export_clients$'))
+    #app.add_handler(CallbackQueryHandler(export_stats, pattern='^export_stats$'))
+    #app.add_handler(CallbackQueryHandler(export_blacklist, pattern='^export_blacklist$'))
+    #app.add_handler(CallbackQueryHandler(export_messages, pattern='^export_messages$'))
     
     # Добавить в bot.py (после других MessageHandler)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=1)
