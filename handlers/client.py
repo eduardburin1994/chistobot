@@ -1653,7 +1653,14 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     keyboard = []
     for order in orders[:5]:
-        order_id, _, _, _, _, date, time, bags, price, status, _ = order
+        # УНИВЕРСАЛЬНАЯ РАСПАКОВКА - берем только то, что нам нужно
+        # order может быть кортежем разной длины, поэтому используем индексы
+        order_id = order[0]  # ID заказа всегда первый
+        date = order[9] if len(order) > 9 else "неизвестно"  # дата
+        time = order[10] if len(order) > 10 else "неизвестно"  # время
+        bags = order[11] if len(order) > 11 else 0  # мешки
+        status = order[13] if len(order) > 13 else 'unknown'  # статус
+        
         status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
         button_text = f"{status_emoji} #{order_id} от {date} {time} ({bags} меш.)"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f'order_detail_{order_id}')])
@@ -1664,7 +1671,6 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
         "Выберите заказ для просмотра:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Детальный просмотр истории заказов"""
     # Проверяем, есть ли мок-объект в контексте (вызов из reply-кнопки)
