@@ -7,6 +7,264 @@ import database as db
 from config import admin_data
 import datetime
 from constants import BLACKLIST_REMOVE, BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
+import io
+from utils.export import (
+    export_orders_to_excel, export_clients_to_excel, export_stats_to_excel,
+    export_blacklist_to_excel, export_messages_to_excel
+)
+
+async def admin_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню экспорта данных"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    text = (
+        "📊 <b>ЭКСПОРТ ДАННЫХ</b>\n\n"
+        "Выберите, что хотите экспортировать:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("📦 Заказы", callback_data='export_orders')],
+        [InlineKeyboardButton("👥 Клиенты", callback_data='export_clients')],
+        [InlineKeyboardButton("📈 Статистика", callback_data='export_stats')],
+        [InlineKeyboardButton("🚫 Чёрный список", callback_data='export_blacklist')],
+        [InlineKeyboardButton("💬 Сообщения", callback_data='export_messages')],
+        [InlineKeyboardButton("◀️ Назад", callback_data='admin')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def export_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт заказов в Excel"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        return
+    
+    # Сначала показываем меню выбора фильтра
+    text = "📦 <b>Экспорт заказов</b>\n\nВыберите, какие заказы экспортировать:"
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Все заказы", callback_data='export_orders_all')],
+        [InlineKeyboardButton("🆕 Новые", callback_data='export_orders_new')],
+        [InlineKeyboardButton("✅ Подтверждённые", callback_data='export_orders_confirmed')],
+        [InlineKeyboardButton("✅ Выполненные", callback_data='export_orders_completed')],
+        [InlineKeyboardButton("❌ Отменённые", callback_data='export_orders_cancelled')],
+        [InlineKeyboardButton("📅 За сегодня", callback_data='export_orders_today')],
+        [InlineKeyboardButton("📅 За неделю", callback_data='export_orders_week')],
+        [InlineKeyboardButton("◀️ Назад", callback_data='admin_export')]
+    ]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def export_orders_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка экспорта заказов с фильтром"""
+    query = update.callback_query
+    await query.answer()
+    
+    filter_type = query.data.replace('export_orders_', '')
+    
+    # Получаем заказы по фильтру
+    import database as db
+    all_orders = db.get_all_orders()
+    
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    week_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%d.%m.%Y")
+    
+    if filter_type == 'all':
+        orders = all_orders
+        filename = f"orders_all_{today}.xlsx"
+    elif filter_type == 'new':
+        orders = [o for o in all_orders if o[13] == 'new']
+        filename = f"orders_new_{today}.xlsx"
+    elif filter_type == 'confirmed':
+        orders = [o for o in all_orders if o[13] == 'confirmed']
+        filename = f"orders_confirmed_{today}.xlsx"
+    elif filter_type == 'completed':
+        orders = [o for o in all_orders if o[13] == 'completed']
+        filename = f"orders_completed_{today}.xlsx"
+    elif filter_type == 'cancelled':
+        orders = [o for o in all_orders if o[13] == 'cancelled']
+        filename = f"orders_cancelled_{today}.xlsx"
+    elif filter_type == 'today':
+        orders = [o for o in all_orders if o[9] == today]
+        filename = f"orders_today_{today}.xlsx"
+    elif filter_type == 'week':
+        orders = [o for o in all_orders if o[9] >= week_ago]
+        filename = f"orders_week_{today}.xlsx"
+    else:
+        await query.edit_message_text("❌ Неизвестный фильтр")
+        return
+    
+    if not orders:
+        await query.edit_message_text("❌ Нет заказов для экспорта")
+        return
+    
+    # Создаём Excel
+    await query.edit_message_text("⏳ Создаю файл Excel, подождите...")
+    
+    try:
+        excel_file = export_orders_to_excel(orders)
+        
+        # Отправляем файл
+        await context.bot.send_document(
+            chat_id=query.from_user.id,
+            document=excel_file,
+            filename=filename,
+            caption=f"📊 Экспорт заказов ({len(orders)} шт.)"
+        )
+        
+        await query.edit_message_text("✅ Файл отправлен!")
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}")
+
+async def export_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт клиентов в Excel"""
+    query = update.callback_query
+    await query.answer()
+    
+    import database as db
+    clients = db.get_all_users()
+    
+    if not clients:
+        await query.edit_message_text("❌ Нет клиентов для экспорта")
+        return
+    
+    await query.edit_message_text("⏳ Создаю файл Excel, подождите...")
+    
+    try:
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        excel_file = export_clients_to_excel(clients)
+        
+        await context.bot.send_document(
+            chat_id=query.from_user.id,
+            document=excel_file,
+            filename=f"clients_{today}.xlsx",
+            caption=f"📊 Экспорт клиентов ({len(clients)} шт.)"
+        )
+        
+        await query.edit_message_text("✅ Файл отправлен!")
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}")
+
+async def export_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт статистики в Excel"""
+    query = update.callback_query
+    await query.answer()
+    
+    import database as db
+    orders = db.get_all_orders()
+    users = db.get_all_users()
+    
+    # Собираем статистику
+    today = datetime.datetime.now().strftime("%d.%m.%Y")
+    
+    # Ежедневная статистика
+    daily_stats = {}
+    for o in orders:
+        date = o[9]
+        if date not in daily_stats:
+            daily_stats[date] = {'orders': 0, 'revenue': 0, 'bags': 0}
+        daily_stats[date]['orders'] += 1
+        daily_stats[date]['revenue'] += o[12]
+        daily_stats[date]['bags'] += o[11]
+    
+    stats_data = {
+        'total_orders': len(orders),
+        'new_orders': len([o for o in orders if o[13] == 'new']),
+        'confirmed_orders': len([o for o in orders if o[13] == 'confirmed']),
+        'completed_orders': len([o for o in orders if o[13] == 'completed']),
+        'cancelled_orders': len([o for o in orders if o[13] == 'cancelled']),
+        'total_clients': len(users),
+        'active_clients': len([u for u in users if u[0] not in admin_data.get('blocked_users', [])]),
+        'total_revenue': sum(o[12] for o in orders),
+        'avg_check': sum(o[12] for o in orders) // len(orders) if orders else 0,
+        'total_bags': sum(o[11] for o in orders),
+        'daily_stats': [{'date': d, **s} for d, s in daily_stats.items()]
+    }
+    
+    await query.edit_message_text("⏳ Создаю файл Excel, подождите...")
+    
+    try:
+        excel_file = export_stats_to_excel(stats_data)
+        
+        await context.bot.send_document(
+            chat_id=query.from_user.id,
+            document=excel_file,
+            filename=f"stats_{today}.xlsx",
+            caption="📊 Экспорт статистики"
+        )
+        
+        await query.edit_message_text("✅ Файл отправлен!")
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}")
+
+async def export_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт чёрного списка"""
+    query = update.callback_query
+    await query.answer()
+    
+    import database as db
+    blacklist = db.get_blacklist()
+    
+    if not blacklist:
+        await query.edit_message_text("📭 Чёрный список пуст")
+        return
+    
+    await query.edit_message_text("⏳ Создаю файл Excel, подождите...")
+    
+    try:
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        excel_file = export_blacklist_to_excel(blacklist)
+        
+        await context.bot.send_document(
+            chat_id=query.from_user.id,
+            document=excel_file,
+            filename=f"blacklist_{today}.xlsx",
+            caption=f"🚫 Чёрный список ({len(blacklist)} записей)"
+        )
+        
+        await query.edit_message_text("✅ Файл отправлен!")
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}")
+
+async def export_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Экспорт сообщений"""
+    query = update.callback_query
+    await query.answer()
+    
+    import database as db
+    messages = db.get_all_messages()
+    
+    if not messages:
+        await query.edit_message_text("📭 Нет сообщений для экспорта")
+        return
+    
+    await query.edit_message_text("⏳ Создаю файл Excel, подождите...")
+    
+    try:
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        excel_file = export_messages_to_excel(messages)
+        
+        await context.bot.send_document(
+            chat_id=query.from_user.id,
+            document=excel_file,
+            filename=f"messages_{today}.xlsx",
+            caption=f"💬 Сообщения ({len(messages)} шт.)"
+        )
+        
+        await query.edit_message_text("✅ Файл отправлен!")
+        
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}")
 
 # Константы для пагинации
 ORDERS_PER_PAGE = 5
