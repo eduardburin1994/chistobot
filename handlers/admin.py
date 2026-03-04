@@ -1790,6 +1790,74 @@ async def admin_blacklist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Старая функция черного списка (заглушка)"""
     await admin_blacklist_menu(update, context)
 
+async def admin_referral_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика реферальной системы для админа"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.from_user.id not in admin_data['admins']:
+        await query.edit_message_text("⛔ Доступ запрещён")
+        return
+    
+    conn = db.get_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Общая статистика
+        cur.execute('SELECT COUNT(*) FROM users WHERE referral_code IS NOT NULL')
+        total_with_codes = cur.fetchone()[0]
+        
+        cur.execute('SELECT COUNT(*) FROM referrals')
+        total_referrals = cur.fetchone()[0]
+        
+        cur.execute('SELECT COUNT(*) FROM referrals WHERE rewarded = TRUE')
+        rewarded = cur.fetchone()[0]
+        
+        cur.execute('SELECT SUM(amount) FROM referral_earnings')
+        total_points = cur.fetchone()[0] or 0
+        
+        cur.execute('SELECT SUM(amount) FROM referral_spendings')
+        spent_points = cur.fetchone()[0] or 0
+        
+        text = (
+            "📊 <b>РЕФЕРАЛЬНАЯ СТАТИСТИКА</b>\n\n"
+            f"👥 Пользователей с кодами: {total_with_codes}\n"
+            f"🔗 Всего рефералов: {total_referrals}\n"
+            f"✅ Активировано заказами: {rewarded}\n"
+            f"💰 Всего начислено баллов: {total_points}\n"
+            f"💸 Потрачено баллов: {spent_points}\n"
+            f"📈 В обороте: {total_points - spent_points}\n\n"
+        )
+        
+        # Топ-5 рефералов
+        cur.execute('''
+            SELECT u.first_name, u.username, u.total_earned
+            FROM users u
+            WHERE u.total_earned > 0
+            ORDER BY u.total_earned DESC
+            LIMIT 5
+        ''')
+        
+        text += "<b>🏆 Топ-5 рефералов:</b>\n"
+        top = cur.fetchall()
+        if top:
+            for i, row in enumerate(top, 1):
+                name = row[0] or f"@{row[1]}" if row[1] else "Пользователь"
+                text += f"{i}. {name} — {row[2]} баллов\n"
+        else:
+            text += "Пока нет данных\n"
+        
+    except Exception as e:
+        text = f"❌ Ошибка загрузки статистики: {e}"
+        print(f"Ошибка в admin_referral_stats: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='admin')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 # =============== REPLY-ВЕРСИИ ФУНКЦИЙ ===============
 
 async def admin_panel_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
