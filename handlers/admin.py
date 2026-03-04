@@ -1675,7 +1675,13 @@ async def set_new_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_type = context.user_data.get('editing_price')
         
         if price_type:
-            admin_data['prices'][price_type] = new_price
+            # Преобразуем ключ '3+' в строку для БД
+            if price_type == '3':
+                price_key = '3+'
+            else:
+                price_key = price_type
+            
+            admin_data['prices'][price_key] = new_price
             
             # Сохраняем в БД
             db.save_prices(admin_data['prices'])
