@@ -2,6 +2,16 @@
 import logging
 import asyncio
 import warnings
+from handlers.courier_auth import (
+    courier_command_start, courier_login_check, courier_logout,
+    ENTER_COURIER_PASSWORD
+)
+from handlers.courier import (
+    courier_main_menu, courier_active_orders, courier_take_order,
+    courier_complete_order, courier_completed_orders, courier_stats,
+    courier_show_phone, courier_back
+)
+
 # Импорты для реферальной системы
 from handlers.referral.core import referral_info, referral_history
 from handlers.referral.stats import referral_top
@@ -735,7 +745,15 @@ async def main(set_webhook=True):
         fallbacks=[CommandHandler('cancel', cancel_command)]
     )
     
-    # ====== 👆 ВСТАВИЛИ, ЕДЕМ ДАЛЬШЕ ======
+    # ConversationHandler для входа курьера
+    courier_login_handler = ConversationHandler(
+        entry_points=[CommandHandler('courier', courier_command_start)],
+        states={
+        ENTER_COURIER_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, courier_login_check)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)]
+    )
+
     
     # Добавляем все обработчики В ПРАВИЛЬНОМ ПОРЯДКЕ
     app.add_handler(CommandHandler("start", start))
@@ -750,7 +768,22 @@ async def main(set_webhook=True):
     app.add_handler(support_handler)
     app.add_handler(price_edit_handler)
     app.add_handler(working_hours_handler)
-    app.add_handler(admin_login_handler)  # ← ДОБАВЬ СЮДА
+    app.add_handler(admin_login_handler) 
+    # Добавить обработчики кнопок курьера
+    app.add_handler(CallbackQueryHandler(courier_take_order, pattern='^courier_take_'))
+    app.add_handler(CallbackQueryHandler(courier_complete_order, pattern='^courier_done_'))
+    app.add_handler(CallbackQueryHandler(courier_show_phone, pattern='^show_phone_'))
+    app.add_handler(CallbackQueryHandler(courier_completed_orders, pattern='^courier_completed$'))
+    app.add_handler(CallbackQueryHandler(courier_stats, pattern='^courier_stats$'))
+    app.add_handler(CallbackQueryHandler(courier_active_orders, pattern='^courier_active_orders$'))
+    app.add_handler(CallbackQueryHandler(courier_back, pattern='^courier_back$'))
+
+    # Добавить обработчики reply-кнопок
+    app.add_handler(MessageHandler(filters.Regex('^📦 Активные заказы$'), courier_active_orders))
+    app.add_handler(MessageHandler(filters.Regex('^✅ Мои выполненные$'), courier_completed_orders))
+    app.add_handler(MessageHandler(filters.Regex('^📊 Моя статистика$'), courier_stats))
+    app.add_handler(MessageHandler(filters.Regex('^🚪 Выйти$'), courier_logout))
+    app.add_handler(courier_login_handler)
     app.add_handler(dialog_reply_handler)
     app.add_handler(messages_search_handler)
     app.add_handler(CallbackQueryHandler(button_handler))  # Обработчик кнопок
