@@ -207,9 +207,9 @@ async def button_handler(update: Update, context):
     # ========== 6. ВСЕ ОСТАЛЬНЫЕ ВАШИ КНОПКИ ==========
     # (весь ваш существующий код с кнопками)
 
-    # Детали заказа
-    if query.data.startswith('order_detail_'):
-        await admin_order_detail(update, context)
+    # Сначала обрабатываем точное совпадение
+    if query.data == 'order_detail_select':
+        await order_detail_select(update, context)
         return ConversationHandler.END
 
     # Кнопки админки
@@ -221,9 +221,9 @@ async def button_handler(update: Update, context):
         await admin_logout(update, context)
         return ConversationHandler.END
     
-    # Возврат заказа в работу
-    if query.data.startswith('reopen_'):
-        await reopen_order(update, context)
+    # Потом обрабатываем все, что начинается с order_detail_
+    if query.data.startswith('order_detail_'):
+        await admin_order_detail(update, context)
         return ConversationHandler.END
         
     # Реферальная система
