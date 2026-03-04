@@ -618,10 +618,12 @@ async def time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка выбора способа оплаты"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = query.from_user.id
+        print(f"💳 payment_method_handler для пользователя {user_id}")
     
     if user_id not in user_data:
         print(f"⚠️ Нет данных для пользователя {user_id} в payment_method_handler, создаем новые")
@@ -785,11 +787,12 @@ async def confirm_order_before_final(update: Update, context: ContextTypes.DEFAU
 
 async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Финальное подтверждение и создание заказа"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")  # ← ДОБАВЬТЕ
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = query.from_user.id
+        print(f"🔍 FINAL_CONFIRM для пользователя {user_id}")
     
     # Проверяем, есть ли данные пользователя
     if user_id not in user_data:
