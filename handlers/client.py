@@ -983,7 +983,21 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
             return ConversationHandler.END
         
         order_id = result[0]
-        
+        # ===== СОХРАНЕНИЕ АДРЕСА В ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ =====
+        try:
+            # Обновляем адрес пользователя в таблице users
+            db.update_user_address(
+                user_id,
+                street_address,
+                entrance,
+                floor,
+                apartment,
+                intercom
+            )
+            print(f"✅ Адрес пользователя {user_id} сохранён в профиль")
+        except Exception as e:
+            print(f"❌ Ошибка сохранения адреса: {e}")
+        # ====================================================
         # ===== СПИСАНИЕ БОНУСОВ =====
         if user_data[user_id].get('use_bonus', False):
             used_bonus = user_data[user_id].get('used_bonus', 0)
