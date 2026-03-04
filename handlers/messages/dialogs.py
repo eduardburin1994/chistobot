@@ -86,8 +86,12 @@ async def admin_dialogs_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
         InlineKeyboardButton("📥 Все", callback_data='admin_dialogs_all')
     ])
     
-    await query.edit_message_text(
-        text, 
-        parse_mode='HTML', 
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        await query.edit_message_text(
+            text, 
+            parse_mode='HTML', 
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            print(f"Ошибка в admin_dialogs_list: {e}")
