@@ -5,6 +5,34 @@ import database as db
 from config import admin_data
 import datetime
 
+async def referral_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает текущий баланс баллов"""
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    conn = db.get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
+        balance = cur.fetchone()[0]
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        balance = 0
+    finally:
+        cur.close()
+        conn.close()
+    
+    text = (
+        f"💰 <b>Ваш бонусный баланс</b>\n\n"
+        f"🎁 У вас <b>{balance} баллов</b>\n"
+        f"1 балл = 1 рубль скидки\n\n"
+        f"💡 Баллы можно использовать при оформлении заказа!"
+    )
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='referral_info')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def referral_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает реферальную информацию пользователя"""
     query = update.callback_query
