@@ -2,6 +2,9 @@
 import logging
 import asyncio
 import warnings
+# Импорты для реферальной системы
+from handlers.referral.core import referral_info, referral_history
+from handlers.referral.stats import referral_top
 from handlers.admin_access import admin_command_start, admin_login_check, admin_logout
 from constants import ENTER_ADMIN_PASSWORD
 # Импорты для мини-мессенджера
@@ -89,7 +92,39 @@ async def button_handler(update: Update, context):
     if query.data.startswith('reopen_'):
         await reopen_order(update, context)
         return ConversationHandler.END
-
+        # Реферальная система
+    if query.data == 'referral_info':
+        await referral_info(update, context)
+        return ConversationHandler.END
+    
+    if query.data == 'referral_history':
+        await referral_history(update, context)
+        return ConversationHandler.END
+    
+    if query.data == 'referral_top':
+        await referral_top(update, context)
+        return ConversationHandler.END
+    
+    if query.data == 'referral_help':
+        # Показываем справку
+        help_text = (
+            "❓ <b>Как работает реферальная программа?</b>\n\n"
+            "1️⃣ <b>Получи ссылку</b> в разделе 'Приведи друга'\n"
+            "2️⃣ <b>Отправь друзьям</b>\n"
+            "3️⃣ Когда друг сделает первый заказ — ты получишь <b>100 баллов</b>\n"
+            "4️⃣ Если друг тоже пригласит кого-то — ты получишь <b>30 баллов</b> за реферала 2 уровня\n"
+            "5️⃣ <b>300 баллов = бесплатный вывоз</b>\n"
+            "6️⃣ Баллы можно использовать как скидку при заказе\n\n"
+            "💡 <b>Совет:</b> Чем больше друзей, тем больше баллов!"
+        )
+        await query.edit_message_text(
+            help_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='referral_info')
+            ]])
+        )
+        return ConversationHandler.END
     # Повтор заказа
     if query.data.startswith('repeat_order_'):
         from handlers.client import repeat_order
