@@ -124,18 +124,31 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Если нет избранных адресов - сразу переходим к вводу нового адреса
             print(f"🏠 У пользователя {user_id} нет избранных адресов, запрашиваем новый")
             
-            # 👇 СОХРАНЯЕМ СОСТОЯНИЕ
+            # 👇 ОЧИЩАЕМ СТАРЫЕ ДАННЫЕ В CONTEXT.USER_DATA
+            if 'conversation_state' in context.user_data:
+                del context.user_data['conversation_state']
+                print(f"🧹 Очищено старое состояние из context.user_data")
+            
+            # 👇 СОХРАНЯЕМ СОСТОЯНИЕ В ORDER_STATE
             from utils.order_state import order_state
             order_state.save_state(user_id, NEW_ADDRESS, user_data.get(user_id, {}))
             
-            # 👇 👇 👇 КРИТИЧЕСКИ ВАЖНЫЕ СТРОКИ 👇 👇 👇
+            # 👇 УСТАНАВЛИВАЕМ НОВОЕ СОСТОЯНИЕ В CONTEXT.USER_DATA
             context.user_data['conversation_state'] = NEW_ADDRESS
             context.user_data['user_id'] = user_id
-            # 👆 👆 👆
+            print(f"✅ Установлено новое состояние NEW_ADDRESS в context.user_data")
             
             if update.callback_query:
                 await query.edit_message_text(
                     "🏠 У вас пока нет сохраненных адресов.\n\n"
+                    "📍 <b>Мы работаем только в Южном микрорайоне</b> на улицах:\n"
+                    "• Октябрьский проспект\n"
+                    "• Улица Можайского\n"
+                    "• Улица Королева\n"
+                    "• Улица Левитана\n"
+                    "• Бульвар Гусева\n"
+                    "• Улица Псковская\n"
+                    "• Улица С.Я. Лемешева\n\n"
                     "Введите адрес (улица и номер дома):\n"
                     "<i>Например: ул. Ленина, д. 10</i>",
                     parse_mode='HTML'
@@ -143,11 +156,19 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text(
                     "🏠 У вас пока нет сохраненных адресов.\n\n"
+                    "📍 <b>Мы работаем только в Южном микрорайоне</b> на улицах:\n"
+                    "• Октябрьский проспект\n"
+                    "• Улица Можайского\n"
+                    "• Улица Королева\n"
+                    "• Улица Левитана\n"
+                    "• Бульвар Гусева\n"
+                    "• Улица Псковская\n"
+                    "• Улица С.Я. Лемешева\n\n"
                     "Введите адрес (улица и номер дома):\n"
                     "<i>Например: ул. Ленина, д. 10</i>",
                     parse_mode='HTML'
                 )
-            return NEW_ADDRESS  # ← ОДИН return
+            return NEW_ADDRESS
         else:
             # Если есть избранные адреса - показываем их
             print(f"📍 У пользователя {user_id} есть избранные адреса: {len(favorites)} шт.")
