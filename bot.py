@@ -1,5 +1,4 @@
 # bot.py
-# bot.py
 import logging
 import asyncio
 import warnings
@@ -70,6 +69,19 @@ EDITING_PRICE = 100
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ========== ТЕСТ ЗАГРУЗКИ .env ==========
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+print("🚀 Загрузка .env из bot.py")
+env_path = Path(__file__).parent / '.env'
+print(f"   Путь к .env: {env_path}")
+load_dotenv(dotenv_path=env_path)
+print(f"   TELEGRAM_BOT_TOKEN: {'✅' if os.getenv('TELEGRAM_BOT_TOKEN') else '❌'}")
+print(f"   DATABASE_URL: {'✅' if os.getenv('DATABASE_URL') else '❌'}")
+# ========================================
 
 async def button_handler(update: Update, context):
     """Обработчик всех кнопок"""
