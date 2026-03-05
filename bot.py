@@ -897,18 +897,22 @@ async def main(set_webhook=True):
     # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
 
+    # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
+    # ВНИМАНИЕ: временно отключено для проверки работы ввода адреса
+    # app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
+
     print(f"🔍 [ОТЛАДКА] set_webhook = {set_webhook}")
-    
+
     if set_webhook:
         # Режим webhook (для Render)
         print("🚀 Бот ЧистоBOT инициализирован для webhook")
         await app.initialize()
         await app.start()
-        
+
         # Отладка для app.py
         print(f"🔍 Отладка: main() возвращает {app}")
         print(f"🔍 Отладка: есть ли app.bot? {hasattr(app, 'bot')}")
-        
+
         return app
     else:
         # Режим polling (для локальной разработки)
@@ -916,8 +920,7 @@ async def main(set_webhook=True):
         await app.initialize()
         await app.start()
         await app.updater.start_polling()
-        
-        # Держим бота запущенным
+
         while True:
             await asyncio.sleep(1)
 
