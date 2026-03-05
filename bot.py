@@ -690,7 +690,10 @@ async def main(set_webhook=True):
     print("🚀 База данных проверена")
     
     # Создаем приложение
-    app = Application.builder().token(TOKEN).build()
+    from telegram.ext import PicklePersistence
+
+    persistence = PicklePersistence(filepath='conversation_data')
+    app = Application.builder().token(TOKEN).persistence(persistence).build()
 
     # Определяем функцию отмены
     async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
