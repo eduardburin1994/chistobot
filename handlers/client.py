@@ -124,9 +124,14 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Если нет избранных адресов - сразу переходим к вводу нового адреса
             print(f"🏠 У пользователя {user_id} нет избранных адресов, запрашиваем новый")
             
-            # 👇 СОХРАНЯЕМ СОСТОЯНИЕ
+            # 👇 СОХРАНЯЕМ СОСТОЯНИЕ В order_state
             from utils.order_state import order_state
             order_state.save_state(user_id, NEW_ADDRESS, user_data.get(user_id, {}))
+            
+            # 👇 👇 👇 ДОБАВЬТЕ ЭТИ ДВЕ СТРОКИ 👇 👇 👇
+            context.user_data['conversation_state'] = NEW_ADDRESS
+            context.user_data['user_id'] = user_id
+            # 👆 👆 👆 
             
             if update.callback_query:
                 await query.edit_message_text(
@@ -142,7 +147,7 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "<i>Например: ул. Ленина, д. 10</i>",
                     parse_mode='HTML'
                 )
-            return NEW_ADDRESS  # ← ОДИН return
+            return NEW_ADDRESS
         else:
             # Если есть избранные адреса - показываем их
             print(f"📍 У пользователя {user_id} есть избранные адреса: {len(favorites)} шт.")
