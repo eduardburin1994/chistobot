@@ -2192,3 +2192,5 @@ def delete_user_completely(user_id):
     finally:
         cur.close()
         conn.close()
+        # Алиас для обратной совместимости
+get_user_favorites = get_user_favorite_addresses

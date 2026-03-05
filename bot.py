@@ -940,5 +940,3 @@ if __name__ == "__main__":
         # Локальная разработка
         print("🚀 Запуск локально в режиме polling")
         asyncio.run(main(set_webhook=False))
-        # Алиас для обратной совместимости
-get_user_favorites = get_user_favorite_addresses
