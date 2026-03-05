@@ -926,11 +926,17 @@ if __name__ == "__main__":
     # Определяем режим запуска в зависимости от окружения
     import os
     
+    # ОТЛАДКА: печатаем все переменные окружения
+    print("🔍 Переменные окружения:")
+    print(f"RENDER: {os.environ.get('RENDER')}")
+    print(f"PORT: {os.environ.get('PORT')}")
+    print(f"Все переменные: {list(os.environ.keys())}")
+    
     # Если есть переменная RENDER или PORT - значит мы на Render
     if os.environ.get('RENDER') or os.environ.get('PORT'):
         print("🚀 Запуск на Render в режиме webhook")
-        asyncio.run(main(set_webhook=True))  # 👈 webhook для Render
+        asyncio.run(main(set_webhook=True))
     else:
         # Локальная разработка
         print("🚀 Запуск локально в режиме polling")
-        asyncio.run(main(set_webhook=False))  # 👈 polling для разработки
+        asyncio.run(main(set_webhook=False))
