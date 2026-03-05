@@ -409,6 +409,8 @@ async def admin_order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     
+    from config import admin_data
+    
     if query.from_user.id not in admin_data['admins']:
         await query.edit_message_text("⛔ Доступ запрещён")
         return
@@ -423,7 +425,7 @@ async def admin_order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("❌ Заказ не найден")
         return
     
-    # БЕЗОПАСНАЯ РАСПАКОВКА через индексы
+    # ✅ БЕЗОПАСНАЯ РАСПАКОВКА через индексы
     order_id = order[0]
     user_id = order[1]
     name = order[2] if len(order) > 2 else ''
