@@ -282,9 +282,18 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение адреса"""
     user_id = update.effective_user.id
-    address = update.message.text
+    address = update.message.text.strip()
     
     print(f"🏠 Получен адрес от пользователя {user_id}: {address}")
+    
+    # Проверяем, что адрес не пустой
+    if not address or len(address) < 5:
+        await update.message.reply_text(
+            "❌ Пожалуйста, введите корректный адрес (минимум 5 символов).\n"
+            "Например: <i>ул. Ленина, д. 10</i>",
+            parse_mode='HTML'
+        )
+        return NEW_ADDRESS
     
     from config import user_data
     if user_id not in user_data:
@@ -300,15 +309,19 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         # Сбрасываем флаг
         user_data[user_id]['adding_from_favorites'] = False
         
-        # Запрашиваем название для избранного
+        # Подтверждаем получение адреса
         await update.message.reply_text(
-            "📝 Введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):"
+            f"✅ Адрес принят: <b>{address}</b>\n\n"
+            f"📝 Теперь введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):",
+            parse_mode='HTML'
         )
         return FAVORITE_NAME
     
-    # Обычный поток заказа - запрашиваем подъезд
+    # Обычный поток заказа - запрашиваем подъезд с подтверждением
     await update.message.reply_text(
-        "🚪 Введите номер подъезда:",
+        f"✅ Адрес принят: <b>{address}</b>\n\n"
+        f"🚪 Введите номер подъезда:",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("⏭ Пропустить", callback_data="skip_entrance")
         ]])
@@ -364,18 +377,42 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
     return NEW_ENTRANCE
 
-async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение нового подъезда"""
+async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение подъезда"""
     user_id = update.effective_user.id
+    entrance = update.message.text.strip()
+    
+    from config import user_data
     if user_id not in user_data:
         user_data[user_id] = {}
-    text = update.message.text
-    user_data[user_id]['entrance'] = text if text not in ['0', '-'] else ''
     
-    # Сохраняем состояние
-    order_state.save_state(user_id, NEW_FLOOR, user_data[user_id])
+    # Проверяем, может это кнопка "пропустить"
+    if entrance.lower() in ['пропустить', 'skip', '-', ''] or update.callback_query:
+        # Если это callback от кнопки "пропустить"
+        if update.callback_query:
+            await update.callback_query.answer()
+            user_data[user_id]['entrance'] = ''
+            await update.callback_query.edit_message_text(
+                f"✅ Адрес: <b>{user_data[user_id].get('street_address', '')}</b>\n"
+                f"🚪 Подъезд: <b>пропущен</b>\n\n"
+                f"🏢 Введите этаж:"
+            )
+        else:
+            user_data[user_id]['entrance'] = ''
+            await update.message.reply_text(
+                f"✅ Подъезд пропущен.\n\n"
+                f"🏢 Введите этаж:"
+            )
+        return NEW_FLOOR
     
-    await update.message.reply_text("📶 Введите этаж (или 0 если нет):")
+    # Сохраняем подъезд
+    user_data[user_id]['entrance'] = entrance
+    
+    await update.message.reply_text(
+        f"✅ Подъезд: <b>{entrance}</b>\n\n"
+        f"🏢 Введите этаж:",
+        parse_mode='HTML'
+    )
     return NEW_FLOOR
 
 async def new_floor(update: Update, context: ContextTypes.DEFAULT_TYPE):
