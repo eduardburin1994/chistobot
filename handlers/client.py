@@ -1651,7 +1651,7 @@ async def favorite_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return FAVORITE_NAME
 
-aasync def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Сохранение адреса в избранное"""
     user_id = update.effective_user.id
     favorite_name = update.message.text
