@@ -16,10 +16,6 @@ if not os.environ.get('RENDER'):
 import logging
 import asyncio
 import warnings
-# ... все остальные импорты ...
-import logging
-import asyncio
-import warnings
 # Импорты для реферальной системы
 from handlers.referral.core import referral_info, referral_history
 from handlers.referral.stats import referral_top
