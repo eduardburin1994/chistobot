@@ -82,22 +82,17 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"  • First name: {user.first_name}")
     print(f"  • Last name: {user.last_name}")
     
-    # 👇 ВОТ СЮДА ВСТАВЛЯЙ ЭТОТ КОД 👇
+    # Сохраняем состояние заказа
     from config import user_data
     if user_id not in user_data:
         user_data[user_id] = {}
     user_data[user_id]['in_order_process'] = True
     print(f"💾 Состояние заказа пользователя {user_id} сохранено (шаг 1)")
-    # 👆 ДО СЮДА 👆
 
     # Проверяем, админ ли пользователь для обхода ограничений
     from config import admin_data
     if user_id in admin_data['admins']:
         print(f"👑 Админ {user_id} оформляет заказ без ограничений")
-    
-    # Инициализируем данные пользователя
-    if user_id not in user_data:
-        user_data[user_id] = {}
     
     # Сохраняем данные пользователя в базу данных
     import database as db
@@ -114,10 +109,6 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"✅ Username @{user.username} сохранён для пользователя {user_id}")
     
     user_info = db.get_user_by_id(user_id)
-    
-    # Сохраняем начальное состояние
-    from handlers.order_state import save_state
-    save_state(user_id, NAME, user_data.get(user_id, {}))
     
     # Проверяем, есть ли телефон
     if user_info and user_info[4]:  # если есть телефон
