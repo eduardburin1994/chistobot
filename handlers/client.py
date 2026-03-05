@@ -1693,6 +1693,33 @@ async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return SUPPORT_MESSAGE
 
+async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать список заказов пользователя"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    import database as db
+    orders = db.get_user_orders(user_id)
+    
+    if not orders:
+        await query.edit_message_text(
+            "📭 У вас пока нет заказов.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В главное меню", callback_data='back_to_menu')
+            ]])
+        )
+        return
+    
+    text = "📋 <b>Ваши заказы:</b>\n\n"
+    for order in orders[:5]:
+        order_id, _, _, _, date, time, bags, price, status, _ = order
+        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+        text += f"{status_emoji} #{order_id} — {date} {time}, {bags} мешков — {price} ₽\n"
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='back_to_menu')]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение сообщения от клиента"""
     user_id = update.effective_user.id
