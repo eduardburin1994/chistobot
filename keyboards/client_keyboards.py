@@ -162,3 +162,41 @@ def remove_keyboard():
     """
     from telegram import ReplyKeyboardRemove
     return ReplyKeyboardRemove()
+def get_favorites_menu_keyboard(favorites):
+    """
+    Клавиатура для меню избранных адресов
+    favorites: список кортежей (id, name, address, ...)
+    """
+    keyboard = []
+    
+    if not favorites:
+        # Если нет избранных адресов
+        keyboard.append([
+            InlineKeyboardButton("➕ Добавить адрес", callback_data="favorite_add_new_address")
+        ])
+    else:
+        # Показываем все избранные адреса
+        for fav in favorites:
+            # Предполагаем, что favorites содержит (id, name, ...)
+            fav_id = fav[0]
+            name = fav[1]
+            keyboard.append([
+                InlineKeyboardButton(f"📍 {name}", callback_data=f"select_fav_{fav_id}")
+            ])
+        
+        # Кнопка добавления нового адреса
+        keyboard.append([
+            InlineKeyboardButton("➕ Добавить новый адрес", callback_data="favorite_add_new_address")
+        ])
+        
+        # Кнопки управления
+        keyboard.append([
+            InlineKeyboardButton("✏️ Управлять адресами", callback_data="manage_favorites")
+        ])
+    
+    # Кнопка возврата в главное меню
+    keyboard.append([
+        InlineKeyboardButton("◀️ В главное меню", callback_data="back_to_menu")
+    ])
+    
+    return InlineKeyboardMarkup(keyboard)
