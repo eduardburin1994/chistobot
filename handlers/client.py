@@ -2011,6 +2011,55 @@ async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def repeat_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Повтор предыдущего заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = int(query.data.replace('repeat_order_', ''))
+    import database as db
+    order = db.get_order_by_id(order_id)
+    
+    if not order:
+        await query.edit_message_text("❌ Заказ не найден")
+        return
+    
+    # Заполняем данные из прошлого заказа
+    user_id = query.from_user.id
+    
+    # Безопасная распаковка
+    name = order[2] if len(order) > 2 else ''
+    phone = order[3] if len(order) > 3 else ''
+    street = order[4] if len(order) > 4 else ''
+    entrance = order[5] if len(order) > 5 else ''
+    floor = order[6] if len(order) > 6 else ''
+    apt = order[7] if len(order) > 7 else ''
+    intercom = order[8] if len(order) > 8 else ''
+    
+    from config import user_data
+    user_data[user_id] = {
+        'name': name,
+        'phone': phone,
+        'street_address': street,
+        'entrance': entrance or '',
+        'floor': floor or '',
+        'apartment': apt or '',
+        'intercom': intercom or ''
+    }
+    
+    # Сохраняем состояние
+    from utils.order_state import order_state
+    order_state.save_state(user_id, DATE, user_data[user_id])
+    
+    # Переходим к выбору даты
+    from keyboards.client_keyboards import create_date_keyboard
+    keyboard = create_date_keyboard()
+    await query.edit_message_text(
+        "📅 Выберите новую дату для повторного заказа:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return DATE
+
 async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение сообщения от клиента"""
     user_id = update.effective_user.id
