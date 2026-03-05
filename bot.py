@@ -581,6 +581,21 @@ async def button_handler(update: Update, context):
     
     return ConversationHandler.END
 
+
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает ошибки и не дает боту упасть."""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    # Отправляем сообщение админу
+    try:
+        error_trace = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
+        message = f"❌ Произошла ошибка:\n`{error_trace[-3500:]}`"
+        await context.bot.send_message(chat_id=MAIN_ADMIN_ID, text=message, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Не удалось отправить сообщение об ошибке админу: {e}")
+
+# !!! ЭТА ЧАСТЬ ДОЛЖНА БЫТЬ ВНЕ error_handler !!!
 async def main(set_webhook=True):
     """Асинхронная функция запуска бота"""
     # Явная инициализация базы данных
@@ -594,18 +609,7 @@ async def main(set_webhook=True):
     # Создаем приложение
     app = Application.builder().token(TOKEN).build()
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обрабатывает ошибки и не дает боту упасть."""
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
-
-    # Отправляем сообщение админу
-    try:
-        error_trace = "".join(traceback.format_exception(None, context.error, context.error.__traceback__))
-        message = f"❌ Произошла ошибка:\n`{error_trace[-3500:]}`"
-        await context.bot.send_message(chat_id=MAIN_ADMIN_ID, text=message, parse_mode='Markdown')
-    except Exception as e:
-        logger.error(f"Не удалось отправить сообщение об ошибке админу: {e}")    
-    # !!! В САМОМ НАЧАЛЕ определяем функцию отмены !!!
+    # Определяем функцию отмены
     async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Отмена текущего действия"""
         user_id = update.effective_user.id
