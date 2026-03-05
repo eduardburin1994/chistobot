@@ -1693,4 +1693,37 @@ async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return SUPPORT_MESSAGE
 
-async def support_message(update: Update,
+async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение сообщения от клиента"""
+    user_id = update.effective_user.id
+    user = update.effective_user
+    message_text = update.message.text
+    
+    import database as db
+    message_id = db.save_message(user_id, message_text)
+    
+    from keyboards.client_keyboards import get_main_keyboard
+    is_admin = user_id in context.bot_data.get('admins', [])
+    await update.message.reply_text(
+        "✅ <b>Сообщение доставлено!</b>\n\n"
+        "Спасибо за обращение. Мы ответим вам в ближайшее время.\n"
+        "Обычно мы отвечаем в течение нескольких часов.",
+        parse_mode='HTML',
+        reply_markup=get_main_keyboard(is_admin)
+    )
+    
+    from config import admin_data
+    from handlers.admin import notify_admin_about_message
+    
+    username = f"@{user.username}" if user.username else "нет username"
+    first_name = user.first_name or ""
+    
+    for admin_id in admin_data['admins']:
+        try:
+            await notify_admin_about_message(
+                update, context, admin_id, user_id, username, first_name, message_text, message_id
+            )
+        except Exception as e:
+            print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
+    
+    return ConversationHandler.END
