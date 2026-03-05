@@ -1,11 +1,15 @@
 # bot.py
-# ========== ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ (В САМОМ НАЧАЛЕ) ==========
+# ========== ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ (ТОЛЬКО ДЛЯ ЛОКАЛЬНОЙ РАЗРАБОТКИ) ==========
 import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-env_path = Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=env_path)
+# Проверяем, запущены ли мы на Render
+if not os.environ.get('RENDER'):
+    # Если не на Render - загружаем .env файл
+    env_path = Path(__file__).parent / '.env'
+    load_dotenv(dotenv_path=env_path)
+    print("🚀 Загружен .env файл (локальный режим)")
 # =====================================================================
 
 import logging
