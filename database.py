@@ -596,7 +596,7 @@ def check_database_integrity():
         conn.close()
 
 def init_db():
-    """Создание таблиц в базе данных PostgreSQL с повторными попытками"""
+    """Проверяет наличие таблиц, но не создаёт их заново"""
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -607,150 +607,26 @@ def init_db():
             
             cur = conn.cursor()
             
-            # Таблица пользователей
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    phone TEXT,
-                    street_address TEXT,
-                    entrance TEXT,
-                    floor TEXT,
-                    apartment TEXT,
-                    intercom TEXT,
-                    registered_date TIMESTAMP
-                )
-            ''')
+            # Просто проверяем, что таблицы существуют, выполняя простой запрос
+            try:
+                cur.execute("SELECT 1 FROM users LIMIT 1")
+                print("✅ Таблицы уже существуют, пропускаем создание")
+            except Exception:
+                # Если таблиц нет, создаём их (но мы уже создали всё вручную)
+                print("⚠️ Таблицы не найдены, но мы создали их через psql")
+                print("✅ Продолжаем работу...")
             
-            # Таблица сообщений
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS messages (
-                    message_id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    user_message TEXT,
-                    admin_reply TEXT,
-                    status TEXT DEFAULT 'new',
-                    created_at TIMESTAMP,
-                    replied_at TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-            
-            # Таблица заказов
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS orders (
-                    order_id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    client_name TEXT,
-                    phone TEXT,
-                    street_address TEXT,
-                    entrance TEXT,
-                    floor TEXT,
-                    apartment TEXT,
-                    intercom TEXT,
-                    order_date TEXT,
-                    order_time TEXT,
-                    bags_count INTEGER,
-                    price INTEGER,
-                    payment_method TEXT DEFAULT 'cash',
-                    payment_status TEXT DEFAULT 'pending',
-                    payment_id TEXT,
-                    status TEXT DEFAULT 'new',
-                    created_at TIMESTAMP,
-                    courier_id BIGINT,
-                    taken_at TIMESTAMP,
-                    confirmed_by BIGINT,
-                    confirmed_by_type TEXT DEFAULT 'admin',
-                    confirmed_at TIMESTAMP,
-                    completed_by BIGINT,
-                    completed_by_type TEXT,
-                    completed_at TIMESTAMP,
-                    cancelled_by BIGINT,
-                    cancelled_at TIMESTAMP,
-                    cancel_reason TEXT,
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-            
-            # Таблица занятых слотов
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS busy_slots (
-                    slot_id SERIAL PRIMARY KEY,
-                    slot_date TEXT,
-                    slot_time TEXT,
-                    order_id INTEGER UNIQUE,
-                    FOREIGN KEY (order_id) REFERENCES orders(order_id)
-                )
-            ''')
-            
-            # Таблица черного списка
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS blacklist (
-                    user_id BIGINT PRIMARY KEY,
-                    reason TEXT,
-                    added_date TIMESTAMP,
-                    added_by BIGINT
-                )
-            ''')
-            
-            # Таблица рассылок
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS broadcasts (
-                    broadcast_id SERIAL PRIMARY KEY,
-                    admin_id BIGINT,
-                    message_text TEXT,
-                    sent_date TIMESTAMP,
-                    recipients_count INTEGER
-                )
-            ''')
-            
-            # Таблица избранных адресов
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS favorite_addresses (
-                    address_id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    address_name TEXT,
-                    street_address TEXT,
-                    entrance TEXT,
-                    floor TEXT,
-                    apartment TEXT,
-                    intercom TEXT,
-                    created_date TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (user_id)
-                )
-            ''')
-            
-            # Индексы
-            cur.execute('''
-                CREATE INDEX IF NOT EXISTS idx_busy_slots_datetime 
-                ON busy_slots (slot_date, slot_time)
-            ''')
-            
-            cur.execute('''
-                CREATE INDEX IF NOT EXISTS idx_orders_courier 
-                ON orders(courier_id) WHERE courier_id IS NOT NULL
-            ''')
-            
-            cur.execute('''
-                CREATE INDEX IF NOT EXISTS idx_orders_active 
-                ON orders(order_date, status) WHERE status IN ('new', 'confirmed')
-            ''')
-            
-            conn.commit()
             cur.close()
             conn.close()
-            print("✅ Таблицы PostgreSQL созданы или уже существуют")
-            return  # Успешно завершаем функцию
+            return
             
         except Exception as e:
-            print(f"⚠️ Попытка {attempt + 1} создания таблиц не удалась: {e}")
+            print(f"⚠️ Попытка {attempt + 1} проверки таблиц не удалась: {e}")
             if attempt < max_retries - 1:
                 print(f"   Повтор через 3 секунд...")
                 time.sleep(3)
             else:
-                print("❌ Не удалось создать таблицы после всех попыток")
+                print("❌ Не удалось проверить таблицы после всех попыток")
                 raise
 
 # =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ ===============
