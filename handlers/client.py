@@ -1884,6 +1884,7 @@ async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать список заказов пользователя"""
+    # Определяем источник вызова
     if update.callback_query:
         query = update.callback_query
         await query.answer()
@@ -1907,7 +1908,7 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = "📋 <b>Ваши заказы:</b>\n\n"
     for order in orders[:5]:
-        # Безопасная распаковка через индексы
+        # БЕЗОПАСНАЯ РАСПАКОВКА через индексы
         order_id = order[0]
         date = order[9] if len(order) > 9 else ''
         time = order[10] if len(order) > 10 else ''
@@ -1915,7 +1916,13 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = order[12] if len(order) > 12 else 0
         status = order[13] if len(order) > 13 else 'unknown'
         
-        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+        status_emoji = {
+            'new': '🆕', 
+            'confirmed': '✅', 
+            'completed': '✅', 
+            'cancelled': '❌'
+        }.get(status, '📝')
+        
         text += f"{status_emoji} #{order_id} — {date} {time}, {bags} мешков — {price} ₽\n"
     
     keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='back_to_menu')]]
