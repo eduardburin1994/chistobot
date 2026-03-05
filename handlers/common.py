@@ -135,6 +135,13 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     text = update.message.text.lower().strip()
     
+    # 👇 ВАЖНО: Проверяем, не находится ли пользователь в процессе заказа
+    from config import user_data
+    if user_id in user_data and user_data[user_id].get('in_order_process', False):
+        # Пользователь в процессе заказа - не мешаем, пропускаем сообщение
+        # Оно будет обработано ConversationHandler'ом
+        return
+    
     # Проверка на блокировку
     if db.is_user_blacklisted(user_id):
         await update.message.reply_text("⛔ Вы заблокированы в этом боте за нарушение правил.")
@@ -176,6 +183,14 @@ async def text_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     elif text in ["курьер", "/курьер"]:
         from handlers.courier_auth import courier_command_start
         await courier_command_start(update, context)
+    # else:
+    #     # Если сообщение не похоже на команду - показываем меню
+    #     from keyboards.client_keyboards import get_main_keyboard
+    #     is_admin = user_id in admin_data['admins']
+    #     await update.message.reply_text(
+    #         "Используйте кнопки внизу экрана для навигации 👇",
+    #         reply_markup=get_main_keyboard(is_admin)
+    #     )
 
 async def welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответа на приветствие"""

@@ -597,9 +597,17 @@ async def main(set_webhook=True):
     # Создаем приложение
     app = Application.builder().token(TOKEN).build()
     
-    # Функция отмены
+    # !!! В САМОМ НАЧАЛЕ определяем функцию отмены !!!
     async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Отмена текущего действия"""
+        user_id = update.effective_user.id
+        
+        # Сбрасываем флаг процесса заказа
+        from config import user_data
+        if user_id in user_data:
+            user_data[user_id]['in_order_process'] = False
+            print(f"🔄 Заказ отменён пользователем {user_id}, флаг сброшен")
+        
         await update.message.reply_text("Действие отменено.")
         return ConversationHandler.END
     

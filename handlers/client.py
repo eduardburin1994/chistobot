@@ -82,6 +82,13 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"  • First name: {user.first_name}")
     print(f"  • Last name: {user.last_name}")
     
+    # 👇 ВОТ СЮДА ВСТАВЛЯЙ ЭТОТ КОД 👇
+    from config import user_data
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    user_data[user_id]['in_order_process'] = True
+    # 👆 ДО СЮДА 👆
+
     # Проверяем, админ ли пользователь для обхода ограничений
     from config import admin_data
     if user_id in admin_data['admins']:
@@ -1078,6 +1085,11 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
             return ConversationHandler.END
         
         order_id = result[0]
+        
+        # 👇 СТРОКА, КОТОРУЮ НУЖНО ДОБАВИТЬ 👇
+        # Заказ успешно создан, снимаем флаг процесса
+        user_data[user_id]['in_order_process'] = False
+        # 👆
         
         # ===== СОХРАНЕНИЕ АДРЕСА В ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ =====
         try:
