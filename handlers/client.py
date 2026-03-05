@@ -154,27 +154,25 @@ async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for addr in favorites[:5]:
             addr_id, name, street, entrance, floor, apt, intercom, _ = addr
             
-            # Формируем краткое описание адреса
-            short_address = street
-            if apt:
-                short_address += f", кв.{apt}"
+            # Формируем краткое описание адреса (только улица)
+            short_address = street  # Убираем добавление квартиры, так как она уже есть в названии
             
             button_text = f"{name} - {short_address}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
-    
-    # Кнопка для нового адреса
-    keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
-    keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
-    
-    # Сохраняем состояние
-    order_state.save_state(user_id, SELECT_ADDRESS, user_data.get(user_id, {}))
-    
-    await message_func(
-        text,
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return SELECT_ADDRESS
+        
+        # Кнопка для нового адреса
+        keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
+        keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
+        
+        # Сохраняем состояние
+        order_state.save_state(user_id, SELECT_ADDRESS, user_data.get(user_id, {}))
+        
+        await message_func(
+            text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return SELECT_ADDRESS
 
 async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор избранного адреса с проверкой района"""
