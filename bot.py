@@ -923,6 +923,14 @@ async def main(set_webhook=True):
 
 # ============== ЗАПУСК БОТА ==============
 if __name__ == "__main__":
-    # Для локальной разработки используем polling (set_webhook=False)
-    # Для Render будет использоваться значение по умолчанию True
-    asyncio.run(main(set_webhook=False))
+    # Определяем режим запуска в зависимости от окружения
+    import os
+    
+    # Если есть переменная RENDER или PORT - значит мы на Render
+    if os.environ.get('RENDER') or os.environ.get('PORT'):
+        print("🚀 Запуск на Render в режиме webhook")
+        asyncio.run(main(set_webhook=True))  # 👈 webhook для Render
+    else:
+        # Локальная разработка
+        print("🚀 Запуск локально в режиме polling")
+        asyncio.run(main(set_webhook=False))  # 👈 polling для разработки
