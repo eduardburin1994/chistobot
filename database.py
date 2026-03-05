@@ -6,7 +6,8 @@ import psycopg2.extras
 from urllib.parse import urlparse
 import random
 import string
-
+print("🔍 Загружаем DATABASE_URL из os.getenv():", os.getenv('DATABASE_URL'))
+print("🔍 Загружаем DATABASE_URL из os.environ.get():", os.environ.get('DATABASE_URL'))
 # Получаем строку подключения из переменной окружения (ИСПОЛЬЗУЕМ os.getenv!)
 DATABASE_URL = os.getenv('DATABASE_URL')
 

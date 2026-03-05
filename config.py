@@ -1,11 +1,12 @@
-# config.py
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Загружаем переменные из .env файла (В САМОМ НАЧАЛЕ!)
-load_dotenv()
+# Явно указываем путь к .env
+env_path = Path('.') / '.env'
+load_dotenv(dotenv_path=env_path)
 
-# Токен бота - читаем из .env через os.getenv()
+# Токен бота
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # Пароль для курьеров
