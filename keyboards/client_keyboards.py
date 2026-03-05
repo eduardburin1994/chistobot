@@ -200,3 +200,41 @@ def get_favorites_menu_keyboard(favorites):
     ])
     
     return InlineKeyboardMarkup(keyboard)
+def get_manage_favorites_keyboard(favorites):
+    """
+    Клавиатура для управления избранными адресами (редактирование/удаление)
+    """
+    keyboard = []
+    
+    for fav in favorites:
+        fav_id = fav[0]
+        name = fav[1]
+        address = fav[2] if len(fav) > 2 else ""
+        
+        # Кнопка с названием адреса для редактирования
+        keyboard.append([
+            InlineKeyboardButton(
+                f"✏️ {name} — {address[:30]}..." if len(address) > 30 else f"✏️ {name} — {address}", 
+                callback_data=f"edit_fav_{fav_id}"
+            )
+        ])
+    
+    # Кнопки навигации
+    keyboard.append([
+        InlineKeyboardButton("➕ Добавить новый", callback_data="favorite_add_new_address"),
+        InlineKeyboardButton("◀️ Назад", callback_data="favorite_menu")
+    ])
+    
+    return InlineKeyboardMarkup(keyboard)
+
+def get_delete_favorite_keyboard(fav_id):
+    """
+    Клавиатура для подтверждения удаления избранного адреса
+    """
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да, удалить", callback_data=f"confirm_delete_{fav_id}"),
+            InlineKeyboardButton("❌ Нет, отмена", callback_data="manage_favorites")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
