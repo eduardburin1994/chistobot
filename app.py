@@ -36,8 +36,10 @@ async def startup():
         
         # Импортируем и запускаем бота
         from bot import main
-        logger.info("⏳ Вызов main(set_webhook=False)...")
-        bot_app = await main(set_webhook=False)
+        
+        # 👇 ИСПРАВЛЕНО: Теперь True для Render
+        logger.info("⏳ Вызов main(set_webhook=True)...")
+        bot_app = await main(set_webhook=True)
         logger.info(f"⏳ main() вернул: {bot_app}")
         
         # Подробная проверка бота
