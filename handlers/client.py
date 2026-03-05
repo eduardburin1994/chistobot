@@ -87,6 +87,7 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in user_data:
         user_data[user_id] = {}
     user_data[user_id]['in_order_process'] = True
+    print(f"💾 Состояние заказа пользователя {user_id} сохранено (шаг 1)")
     # 👆 ДО СЮДА 👆
 
     # Проверяем, админ ли пользователь для обхода ограничений
@@ -115,18 +116,62 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_info = db.get_user_by_id(user_id)
     
     # Сохраняем начальное состояние
-    order_state.save_state(user_id, NAME, user_data.get(user_id, {}))
+    from handlers.order_state import save_state
+    save_state(user_id, NAME, user_data.get(user_id, {}))
     
-    # Проверяем, есть ли телефон и адрес
+    # Проверяем, есть ли телефон
     if user_info and user_info[4]:  # если есть телефон
         user_data[user_id]['name'] = user_info[2] or user.first_name
         user_data[user_id]['phone'] = user_info[4]
         user_data[user_id]['has_saved_data'] = True
+        print(f"✅ Найдены сохранённые данные: имя={user_info[2]}, телефон={user_info[4]}")
         
-        # Если есть сохранённый адрес, сразу показываем выбор адреса
-        return await choose_address(update, context)
+        # Получаем избранные адреса пользователя
+        favorites = db.get_user_favorites(user_id)
+        
+        if not favorites:
+            # Если нет избранных адресов - сразу переходим к вводу нового адреса
+            print(f"🏠 У пользователя {user_id} нет избранных адресов, запрашиваем новый")
+            
+            if update.callback_query:
+                await query.edit_message_text(
+                    "🏠 У вас пока нет сохраненных адресов.\n\n"
+                    "Введите адрес (улица и номер дома):\n"
+                    "<i>Например: ул. Ленина, д. 10</i>",
+                    parse_mode='HTML'
+                )
+            else:
+                await update.message.reply_text(
+                    "🏠 У вас пока нет сохраненных адресов.\n\n"
+                    "Введите адрес (улица и номер дома):\n"
+                    "<i>Например: ул. Ленина, д. 10</i>",
+                    parse_mode='HTML'
+                )
+            return NEW_ADDRESS
+        else:
+            # Если есть избранные адреса - показываем их
+            print(f"📍 У пользователя {user_id} есть избранные адреса: {len(favorites)} шт.")
+            
+            from keyboards.client_keyboards import get_favorites_menu_keyboard
+            if update.callback_query:
+                await query.edit_message_text(
+                    "📍 <b>Выберите адрес из избранного</b>\n"
+                    "или добавьте новый:",
+                    parse_mode='HTML',
+                    reply_markup=get_favorites_menu_keyboard(favorites)
+                )
+            else:
+                await update.message.reply_text(
+                    "📍 <b>Выберите адрес из избранного</b>\n"
+                    "или добавьте новый:",
+                    parse_mode='HTML',
+                    reply_markup=get_favorites_menu_keyboard(favorites)
+                )
+            return SELECT_ADDRESS
     else:
         # Если нет телефона - запрашиваем имя
+        print(f"📝 У пользователя {user_id} нет телефона, запрашиваем имя")
+        
         if update.callback_query:
             await query.edit_message_text("📝 Шаг 1: Введите ваше имя:")
         else:
