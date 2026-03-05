@@ -53,7 +53,7 @@ from handlers.client import (
     select_favorite_address, new_address_start, manage_favorites, edit_favorite_menu,
     edit_favorite_name, save_favorite_name, delete_favorite_confirm, confirm_delete_favorite,
     favorite_add_after_order, payment_method_handler, back_to_bags, order_detail,
-    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order,
+    bags_callback, confirm_order_before_final, repeat_order, final_confirm_order, start_add_favorite,
     use_bonus_handler  # Добавлен импорт
 )
 from handlers.admin import (
@@ -385,7 +385,9 @@ async def button_handler(update: Update, context):
         return ConversationHandler.END
     
     if query.data == 'favorite_add_new_address':
-        print(f"➕ ДОБАВЛЕНИЕ НОВОГО АДРЕСА ИЗ ИЗБРАННОГО")
+    # Обработка теперь в ConversationHandler
+        await query.answer()
+        return  # ничего не делаем, обработчик выше перехватит
         
         user_id = query.from_user.id
         from config import user_data
@@ -706,8 +708,11 @@ async def main(set_webhook=True):
     
     # Единый ConversationHandler для всего процесса заказа
     conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_order, pattern='^new_order$')],
-        states={
+    entry_points=[
+        CallbackQueryHandler(start_order, pattern='^new_order$'),
+        CallbackQueryHandler(start_add_favorite, pattern='^favorite_add_new_address$')  # ← новая строка
+    ],
+    states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
             PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
             CHECK_ADDRESS: [CallbackQueryHandler(check_address_handler, pattern='^(change_address_yes|change_address_no)$')],

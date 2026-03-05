@@ -2239,3 +2239,31 @@ async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"❌ Ошибка уведомления админа {admin_id}: {e}")
     
     return ConversationHandler.END
+async def start_add_favorite(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало добавления нового адреса в избранное (без привязки к заказу)"""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    # Инициализируем данные пользователя
+    from config import user_data
+    if user_id not in user_data:
+        user_data[user_id] = {}
+
+    # Устанавливаем флаг, что это добавление из избранного
+    user_data[user_id]['adding_from_favorites'] = True
+
+    # Сохраняем состояние в order_state и context.user_data
+    from utils.order_state import order_state
+    order_state.save_state(user_id, NEW_ADDRESS, {})
+    context.user_data['conversation_state'] = NEW_ADDRESS
+    context.user_data['user_id'] = user_id
+
+    # Отправляем сообщение с просьбой ввести адрес
+    await query.edit_message_text(
+        "🏠 <b>Добавление нового адреса в избранное</b>\n\n"
+        "Введите адрес (улица и номер дома):\n"
+        "<i>Например: ул. Ленина, д. 10</i>",
+        parse_mode='HTML'
+    )
+    return NEW_ADDRESS
