@@ -108,6 +108,11 @@ async def telegram(request):
             logger.error(f"❌ Ошибка парсинга JSON: {e}")
             return Response(status_code=400)
         
+        # 👇 ВАЖНО: Проверяем, что это действительно обновление от Telegram
+        if 'update_id' not in update_data:
+            logger.info(f"📦 Получен не-telegram запрос (пропускаем): {update_data}")
+            return Response(status_code=200)  # Просто отвечаем OK для мониторинга
+        
         # Логируем тип обновления
         if 'message' in update_data:
             message = update_data['message']
