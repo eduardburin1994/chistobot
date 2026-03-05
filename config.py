@@ -1,5 +1,13 @@
 # config.py
 import os
+from dotenv import load_dotenv
+
+# Загружаем переменные из .env файла
+load_dotenv()
+
+# Токен бота - теперь читается из .env
+TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8730099509:AAF83M1EjAqwB7FErvaRXJUPKaP-1kREv8I')
+import os
 import logging
 from telegram.warnings import PTBUserWarning
 import warnings
