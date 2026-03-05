@@ -1707,11 +1707,18 @@ async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_
     else:
         text += "У вас пока нет избранных адресов"
     
-    keyboard = [
-        [InlineKeyboardButton("➕ Добавить текущий адрес", callback_data='favorite_add')],
-        [InlineKeyboardButton("✏️ Управление адресами", callback_data='manage_favorites')],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
-    ]
+    # Показываем разные кнопки в зависимости от наличия адресов
+    if favorites:
+        keyboard = [
+            [InlineKeyboardButton("➕ Добавить текущий адрес", callback_data='favorite_add')],
+            [InlineKeyboardButton("✏️ Управление адресами", callback_data='manage_favorites')],
+            [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton("➕ Добавить новый адрес", callback_data='favorite_add_new_address')],
+            [InlineKeyboardButton("◀️ Назад в меню", callback_data='back_to_menu')]
+        ]
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -1780,36 +1787,51 @@ async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     # Сохраняем в базу
     import database as db
-    favorite_id = db.save_favorite_address(  # ← ПРАВИЛЬНОЕ НАЗВАНИЕ
-    user_id=user_id,
-    name=favorite_name,
-    **address_data
-    )
-    
-    if favorite_id:
-        await update.message.reply_text(
-            f"✅ Адрес <b>«{favorite_name}»</b> добавлен в избранное!\n\n"
-            f"📍 <b>Адрес:</b> {address_data['street_address']}\n"
-            f"🚪 <b>Подъезд:</b> {address_data['entrance'] or 'не указан'}\n"
-            f"🏢 <b>Этаж:</b> {address_data['floor'] or 'не указан'}\n"
-            f"🚪 <b>Квартира:</b> {address_data['apartment'] or 'не указана'}\n"
-            f"📞 <b>Домофон:</b> {address_data['intercom'] or 'не указан'}",
-            parse_mode='HTML'
+    try:
+        # Проверяем, есть ли у нас данные для сохранения
+        if not address_data['street_address']:
+            await update.message.reply_text("❌ Нет данных адреса для сохранения")
+            return ConversationHandler.END
+            
+        # Сохраняем адрес (исправлено: передаем параметры по порядку)
+        favorite_id = db.save_favorite_address(
+            user_id=user_id,
+            address_name=favorite_name,
+            street_address=address_data['street_address'],
+            entrance=address_data['entrance'],
+            floor=address_data['floor'],
+            apartment=address_data['apartment'],
+            intercom=address_data['intercom']
         )
         
-        # Показываем меню избранного
-        from keyboards.client_keyboards import get_favorites_menu_keyboard
-        favorites = db.get_user_favorite_addresses(user_id)
-        
-        await update.message.reply_text(
-            "📍 <b>Ваши избранные адреса:</b>\n\n"
-            "Теперь этот адрес доступен при заказе!",
-            parse_mode='HTML',
-            reply_markup=get_favorites_menu_keyboard(favorites)
-        )
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("❌ Ошибка при сохранении адреса")
+        if favorite_id:
+            await update.message.reply_text(
+                f"✅ Адрес <b>«{favorite_name}»</b> добавлен в избранное!\n\n"
+                f"📍 <b>Адрес:</b> {address_data['street_address']}\n"
+                f"🚪 <b>Подъезд:</b> {address_data['entrance'] or 'не указан'}\n"
+                f"🏢 <b>Этаж:</b> {address_data['floor'] or 'не указан'}\n"
+                f"🚪 <b>Квартира:</b> {address_data['apartment'] or 'не указана'}\n"
+                f"📞 <b>Домофон:</b> {address_data['intercom'] or 'не указан'}",
+                parse_mode='HTML'
+            )
+            
+            # Показываем меню избранного
+            from keyboards.client_keyboards import get_favorites_menu_keyboard
+            favorites = db.get_user_favorite_addresses(user_id)
+            
+            await update.message.reply_text(
+                "📍 <b>Ваши избранные адреса:</b>\n\n"
+                "Теперь этот адрес доступен при заказе!",
+                parse_mode='HTML',
+                reply_markup=get_favorites_menu_keyboard(favorites)
+            )
+            return ConversationHandler.END
+        else:
+            await update.message.reply_text("❌ Ошибка при сохранении адреса")
+            return ConversationHandler.END
+    except Exception as e:
+        print(f"❌ Ошибка в favorite_save: {e}")
+        await update.message.reply_text("❌ Произошла ошибка при сохранении")
         return ConversationHandler.END
 
 async def manage_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1826,7 +1848,8 @@ async def manage_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not favorites:
         text += "У вас пока нет избранных адресов."
-        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='favorite_menu')]]
+        keyboard = [[InlineKeyboardButton("➕ Добавить адрес", callback_data='favorite_add'),  # ← должна быть эта кнопка
+                    InlineKeyboardButton("◀️ Назад", callback_data='favorite_menu')]]
     else:
         keyboard = []
         for addr in favorites[:5]:
@@ -1834,7 +1857,8 @@ async def manage_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
             button_text = f"✏️ {name}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f'edit_fav_{addr_id}')])
         
-        keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data='favorite_menu')])
+        keyboard.append([InlineKeyboardButton("➕ Добавить новый", callback_data='favorite_add_new_address'),  # ← эта кнопка для добавления
+                        InlineKeyboardButton("◀️ Назад", callback_data='favorite_menu')])
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
