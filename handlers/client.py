@@ -1577,6 +1577,105 @@ async def favorite_addresses_menu(update: Update, context: ContextTypes.DEFAULT_
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def favorite_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавление адреса в избранное из базы данных"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    import database as db
+    
+    # Получаем данные пользователя из базы данных
+    user_info = db.get_user_by_id(user_id)
+    
+    # Проверяем, есть ли у пользователя сохранённый адрес в базе
+    if not user_info or not user_info[5]:
+        await query.edit_message_text(
+            "❌ У вас ещё нет сохранённого адреса.\n"
+            "Сначала оформите заказ, чтобы адрес сохранился в базе.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return
+    
+    # Проверяем, не добавлен ли уже этот адрес в избранное
+    favorites = db.get_user_favorite_addresses(user_id)
+    for fav in favorites:
+        if (fav[2] == user_info[5] and
+            fav[3] == user_info[6] and
+            fav[4] == user_info[7] and
+            fav[5] == user_info[8] and
+            fav[6] == user_info[9]):
+            await query.edit_message_text(
+                "❌ Этот адрес уже есть в избранном!",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu')
+                ]])
+            )
+            return
+    
+    # Спрашиваем название для адреса
+    await query.edit_message_text(
+        "Введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):"
+    )
+    return FAVORITE_NAME
+
+async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохранение адреса из базы данных в избранное"""
+    user_id = update.effective_user.id
+    address_name = update.message.text
+    
+    import database as db
+    
+    # Получаем данные пользователя из базы
+    user_info = db.get_user_by_id(user_id)
+    
+    if not user_info or not user_info[5]:
+        await update.message.reply_text(
+            "❌ Ошибка: адрес не найден в базе данных.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
+            ]])
+        )
+        return ConversationHandler.END
+    
+    # Сохраняем адрес в избранное
+    db.save_favorite_address(
+        user_id,
+        address_name,
+        user_info[5],
+        user_info[6] or '',
+        user_info[7] or '',
+        user_info[8] or '',
+        user_info[9] or ''
+    )
+    
+    # Формируем красивый адрес для подтверждения
+    full_address = user_info[5]
+    details = []
+    if user_info[6]:
+        details.append(f"под. {user_info[6]}")
+    if user_info[7]:
+        details.append(f"эт. {user_info[7]}")
+    if user_info[8]:
+        details.append(f"кв. {user_info[8]}")
+    if user_info[9]:
+        details.append(f"домофон {user_info[9]}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    await update.message.reply_text(
+        f"✅ Адрес '{address_name}' сохранён в избранное!\n\n"
+        f"📍 {full_address}",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu')
+        ]])
+    )
+    
+    return ConversationHandler.END
+
 async def manage_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Управление избранными адресами"""
     query = update.callback_query
