@@ -1,4 +1,5 @@
 # database.py
+import time
 import os
 import datetime
 import psycopg2
@@ -388,6 +389,31 @@ def get_connection():
     except Exception as e:
         print(f"❌ Ошибка подключения к БД: {e}")
         return None
+    
+def get_connection_with_retry(max_retries=5, delay=3):
+    """
+    Пытается подключиться к БД несколько раз.
+    Это полезно, если база на Render "спит" и просыпается с задержкой.
+    """
+    print(f"🔄 Попытка подключения к БД (макс. {max_retries} попыток)...")
+    for attempt in range(max_retries):
+        try:
+            conn = get_connection()
+            if conn:
+                # Проверим, что соединение рабочее
+                cur = conn.cursor()
+                cur.execute('SELECT 1')
+                cur.close()
+                print(f"✅ Подключение к БД успешно (попытка {attempt + 1})")
+                return conn
+        except Exception as e:
+            print(f"⚠️ Попытка {attempt + 1} не удалась: {e}")
+            if attempt < max_retries - 1:
+                print(f"   Повтор через {delay} секунд...")
+                time.sleep(delay)
+            else:
+                print("❌ Не удалось подключиться к БД после всех попыток.")
+    return None
 
 def save_prices(prices):
     """Сохраняет цены в БД"""
@@ -541,7 +567,7 @@ def check_database_integrity():
 
 def init_db():
     """Создание таблиц в базе данных PostgreSQL"""
-    conn = get_connection()
+    conn = get_connection_with_retry()  # ← Вот эта замена
     if not conn:
         print("❌ Не удалось подключиться к БД для инициализации")
         return
