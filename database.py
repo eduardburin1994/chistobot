@@ -378,42 +378,72 @@ def use_balance_for_order(user_id, order_id, amount):
 # =============== ОСНОВНЫЕ ФУНКЦИИ БД ===============
 
 def get_connection():
-    """Возвращает подключение к PostgreSQL"""
+    """Возвращает подключение к PostgreSQL с улучшенными настройками keepalive"""
     if not DATABASE_URL:
         print("❌ DATABASE_URL не найден в переменных окружения!")
         return None
     
     try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=10)
+        # Добавляем параметры keepalive для стабильного соединения
+        conn = psycopg2.connect(
+            DATABASE_URL, 
+            sslmode='require', 
+            connect_timeout=30,
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5,
+            options='-c statement_timeout=30000'
+        )
+        
+        # Проверяем соединение
+        cur = conn.cursor()
+        cur.execute('SELECT 1')
+        cur.close()
+        
         return conn
     except Exception as e:
         print(f"❌ Ошибка подключения к БД: {e}")
         return None
     
-def get_connection_with_retry(max_retries=5, delay=3):
+def get_connection_with_retry(max_retries=10, delay=5):
     """
-    Пытается подключиться к БД несколько раз.
-    Это полезно, если база на Render "спит" и просыпается с задержкой.
+    Пытается подключиться к БД несколько раз с увеличенными интервалами.
     """
     print(f"🔄 Попытка подключения к БД (макс. {max_retries} попыток)...")
     for attempt in range(max_retries):
         try:
             conn = get_connection()
             if conn:
-                # Проверим, что соединение рабочее
-                cur = conn.cursor()
-                cur.execute('SELECT 1')
-                cur.close()
                 print(f"✅ Подключение к БД успешно (попытка {attempt + 1})")
                 return conn
         except Exception as e:
             print(f"⚠️ Попытка {attempt + 1} не удалась: {e}")
             if attempt < max_retries - 1:
-                print(f"   Повтор через {delay} секунд...")
-                time.sleep(delay)
+                wait_time = delay * (attempt + 1)  # Увеличиваем время ожидания
+                print(f"   Повтор через {wait_time} секунд...")
+                time.sleep(wait_time)
             else:
                 print("❌ Не удалось подключиться к БД после всех попыток.")
     return None
+
+def execute_with_retry(cursor_func, *args, **kwargs):
+    """
+    Выполняет функцию с курсором, автоматически переподключаясь при ошибке
+    """
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            return cursor_func(*args, **kwargs)
+        except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
+            print(f"⚠️ Ошибка выполнения запроса (попытка {attempt + 1}): {e}")
+            if attempt < max_attempts - 1:
+                time.sleep(2)
+                # Переподключаемся
+                globals()['conn'] = get_connection_with_retry()
+                if 'conn' in globals() and globals()['conn']:
+                    continue
+            raise
 
 def save_prices(prices):
     """Сохраняет цены в БД"""
