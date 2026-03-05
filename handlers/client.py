@@ -346,6 +346,7 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PAYMENT_METHOD
 
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    print(f"🔥🔥🔥 new_address ВЫЗВАНА для пользователя {update.effective_user.id}")
     """Получение адреса"""
     try:
         user_id = update.effective_user.id
