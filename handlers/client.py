@@ -353,29 +353,9 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return FAVORITE_NAME
     
-    # Обычный поток заказа - запрашиваем подъезд с подтверждением
-    await update.message.reply_text(
-        f"✅ Адрес принят: <b>{address}</b>\n\n"
-        f"🚪 Введите номер подъезда:",
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭ Пропустить", callback_data="skip_entrance")
-        ]])
-    )
-    return NEW_ENTRANCE
-    # ============================================================
+    # ========== ДАЛЬШЕ ИДЕТ КОД ДЛЯ ОБЫЧНОГО ЗАКАЗА ==========
     
-    # Проверяем, не вводил ли пользователь уже адрес
-    if user_id in user_data and user_data[user_id].get('address_confirmed', False):
-        await update.message.reply_text(
-            "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        return ConversationHandler.END
-    
-    # =============== ПРОВЕРКА РАЙОНА ===============
+    # Проверка района
     if not is_address_allowed(address):
         streets_list = (
             "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
@@ -396,21 +376,28 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             parse_mode='HTML'
         )
         return NEW_ADDRESS
-    # ==============================================
     
-    if user_id not in user_data:
-        user_data[user_id] = {}
-        print(f"⚠️ Создана новая запись для пользователя {user_id}")
+    # Если пользователь уже вводил адрес (но это не должно случаться)
+    if user_id in user_data and user_data[user_id].get('address_confirmed', False):
+        await update.message.reply_text(
+            "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+            ]])
+        )
+        return ConversationHandler.END
     
-    user_data[user_id]['street_address'] = address
+    # Обычный поток заказа - запрашиваем подъезд
     user_data[user_id]['address_confirmed'] = True
-    print(f"✅ Сохранён новый адрес: {user_data[user_id]['street_address']}")
-    print(f"🔄 Переходим к состоянию NEW_ENTRANCE ({NEW_ENTRANCE})")
     
-    # Сохраняем состояние
-    order_state.save_state(user_id, NEW_ENTRANCE, user_data[user_id])
-    
-    await update.message.reply_text("🚪 Введите номер подъезда (или 0 если нет):")
+    await update.message.reply_text(
+        f"✅ Адрес принят: <b>{address}</b>\n\n"
+        f"🚪 Введите номер подъезда:",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭ Пропустить", callback_data="skip_entrance")
+        ]])
+    )
     return NEW_ENTRANCE
 
 async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1744,10 +1731,10 @@ async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     # Сохраняем в базу
     import database as db
-    favorite_id = db.add_favorite_address(
-        user_id=user_id,
-        name=favorite_name,
-        **address_data
+    favorite_id = db.save_favorite_address(  # ← ПРАВИЛЬНОЕ НАЗВАНИЕ
+    user_id=user_id,
+    name=favorite_name,
+    **address_data
     )
     
     if favorite_id:
@@ -1802,50 +1789,6 @@ async def manage_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def favorite_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Добавление адреса в избранное из базы данных"""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    
-    import database as db
-    
-    # Получаем данные пользователя из базы данных
-    user_info = db.get_user_by_id(user_id)
-    
-    # Проверяем, есть ли у пользователя сохранённый адрес в базе
-    if not user_info or not user_info[5]:
-        await query.edit_message_text(
-            "❌ У вас ещё нет сохранённого адреса.\n"
-            "Сначала оформите заказ, чтобы адрес сохранился в базе.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        return
-    
-    # Проверяем, не добавлен ли уже этот адрес в избранное
-    favorites = db.get_user_favorite_addresses(user_id)
-    for fav in favorites:
-        if (fav[2] == user_info[5] and
-            fav[3] == user_info[6] and
-            fav[4] == user_info[7] and
-            fav[5] == user_info[8] and
-            fav[6] == user_info[9]):
-            await query.edit_message_text(
-                "❌ Этот адрес уже есть в избранном!",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu')
-                ]])
-            )
-            return
-    
-    # Спрашиваем название для адреса
-    await query.edit_message_text(
-        "Введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):"
-    )
-    return FAVORITE_NAME
 
 async def edit_favorite_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню редактирования конкретного адреса"""
@@ -2135,6 +2078,7 @@ async def repeat_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    from utils.order_state import order_state
     order_id = int(query.data.replace('repeat_order_', ''))
     import database as db
     order = db.get_order_by_id(order_id)
@@ -2165,6 +2109,8 @@ async def repeat_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'apartment': apt or '',
         'intercom': intercom or ''
     }
+
+    from utils.order_state import order_state
     
     # Сохраняем состояние
     from utils.order_state import order_state
