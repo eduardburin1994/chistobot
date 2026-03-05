@@ -417,13 +417,28 @@ async def admin_order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE)
     order_id = int(query.data.replace('order_detail_', ''))
     
     # Получаем заказ из базы
+    import database as db
     order = db.get_order_by_id(order_id)
     if not order:
         await query.edit_message_text("❌ Заказ не найден")
         return
     
-    # Распаковываем заказ
-    order_id, user_id, name, phone, street, entrance, floor, apt, intercom, date, time, bags, price, status, created = order
+    # БЕЗОПАСНАЯ РАСПАКОВКА через индексы
+    order_id = order[0]
+    user_id = order[1]
+    name = order[2] if len(order) > 2 else ''
+    phone = order[3] if len(order) > 3 else ''
+    street = order[4] if len(order) > 4 else ''
+    entrance = order[5] if len(order) > 5 else ''
+    floor = order[6] if len(order) > 6 else ''
+    apt = order[7] if len(order) > 7 else ''
+    intercom = order[8] if len(order) > 8 else ''
+    date = order[9] if len(order) > 9 else ''
+    time = order[10] if len(order) > 10 else ''
+    bags = order[11] if len(order) > 11 else 0
+    price = order[12] if len(order) > 12 else 0
+    status = order[13] if len(order) > 13 else 'unknown'
+    created = order[14] if len(order) > 14 else ''
     
     # Получаем информацию о клиенте
     user_info = db.get_user_by_id(user_id)
