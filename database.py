@@ -7,6 +7,9 @@ from urllib.parse import urlparse
 import random
 import string
 
+# Получаем строку подключения из переменной окружения (ИСПОЛЬЗУЕМ os.getenv!)
+DATABASE_URL = os.getenv('DATABASE_URL')
+
 # =============== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ МОСКОВСКОГО ВРЕМЕНИ ===============
 def moscow_now():
     """Возвращает текущее московское время (UTC+3)"""
