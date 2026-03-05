@@ -109,7 +109,7 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"✅ Username @{user.username} сохранён для пользователя {user_id}")
     
     user_info = db.get_user_by_id(user_id)
-    
+
     # Проверяем, есть ли телефон
     if user_info and user_info[4]:  # если есть телефон
         user_data[user_id]['name'] = user_info[2] or user.first_name
@@ -123,6 +123,10 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not favorites:
             # Если нет избранных адресов - сразу переходим к вводу нового адреса
             print(f"🏠 У пользователя {user_id} нет избранных адресов, запрашиваем новый")
+            
+            # 👇 СОХРАНЯЕМ СОСТОЯНИЕ
+            from utils.order_state import order_state
+            order_state.save_state(user_id, NEW_ADDRESS, user_data.get(user_id, {}))
             
             if update.callback_query:
                 await query.edit_message_text(
@@ -138,7 +142,7 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "<i>Например: ул. Ленина, д. 10</i>",
                     parse_mode='HTML'
                 )
-            return NEW_ADDRESS
+            return NEW_ADDRESS  # ← ОДИН return
         else:
             # Если есть избранные адреса - показываем их
             print(f"📍 У пользователя {user_id} есть избранные адреса: {len(favorites)} шт.")
