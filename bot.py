@@ -52,7 +52,7 @@ from handlers.client import (
     favorite_add, favorite_save, favorite_delete_menu, favorite_delete, choose_address, 
     select_favorite_address, new_address_start, manage_favorites, edit_favorite_menu,
     edit_favorite_name, save_favorite_name, delete_favorite_confirm, confirm_delete_favorite,
-    favorite_add_after_order, payment_method_handler, back_to_bags, order_detail,
+    favorite_add_after_order, start_add_favorite, payment_method_handler, back_to_bags, order_detail,
     bags_callback, confirm_order_before_final, repeat_order, final_confirm_order, start_add_favorite,
     use_bonus_handler  # Добавлен импорт
 )

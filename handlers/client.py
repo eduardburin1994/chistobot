@@ -2267,3 +2267,30 @@ async def start_add_favorite(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode='HTML'
     )
     return NEW_ADDRESS
+
+async def start_add_favorite(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало добавления нового адреса в избранное (без привязки к заказу)"""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    from config import user_data
+    if user_id not in user_data:
+        user_data[user_id] = {}
+
+    # Устанавливаем флаг, что это добавление из избранного
+    user_data[user_id]['adding_from_favorites'] = True
+
+    # Сохраняем состояние
+    from utils.order_state import order_state
+    order_state.save_state(user_id, NEW_ADDRESS, {})
+    context.user_data['conversation_state'] = NEW_ADDRESS
+    context.user_data['user_id'] = user_id
+
+    await query.edit_message_text(
+        "🏠 <b>Добавление нового адреса в избранное</b>\n\n"
+        "Введите адрес (улица и номер дома):\n"
+        "<i>Например: ул. Ленина, д. 10</i>",
+        parse_mode='HTML'
+    )
+    return NEW_ADDRESS
