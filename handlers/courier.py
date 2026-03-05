@@ -283,6 +283,16 @@ async def courier_completed_orders(update: Update, context: ContextTypes.DEFAULT
     import database as db
     orders = db.get_courier_completed_orders(courier_id)
     
+    # Определяем, откуда пришел вызов
+    if update.callback_query:
+        # Если из callback (inline кнопка)
+        query = update.callback_query
+        await query.answer()
+        message_func = query.edit_message_text
+    else:
+        # Если из сообщения (reply кнопка)
+        message_func = update.message.reply_text
+    
     if not orders:
         text = "📭 У вас пока нет выполненных заказов"
     else:
@@ -291,12 +301,12 @@ async def courier_completed_orders(update: Update, context: ContextTypes.DEFAULT
             order_id, date, time, bags, price = order
             text += f"#{order_id} — {date} {time}, {bags} мешков — {price} ₽\n"
     
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        await query.edit_message_text(text, parse_mode='HTML', reply_markup=get_courier_back_button())
-    else:
-        await update.message.reply_text(text, parse_mode='HTML', reply_markup=get_courier_back_button())
+    # Отправляем ответ
+    await message_func(
+        text,
+        parse_mode='HTML',
+        reply_markup=get_courier_back_button()
+    )
 
 async def courier_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Расширенная статистика курьера"""
@@ -343,17 +353,25 @@ async def courier_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if hourly:
         text += "\n<b>⏰ Активные часы:</b>\n"
-        # Показываем топ-3 часа
         top_hours = sorted(hourly.items(), key=lambda x: x[1], reverse=True)[:3]
         for hour, count in top_hours:
             text += f"• {hour}:00 — {count} заказов\n"
     
+    # Определяем, откуда пришел вызов
     if update.callback_query:
         query = update.callback_query
         await query.answer()
-        await query.edit_message_text(text, parse_mode='HTML', reply_markup=get_courier_back_button())
+        await query.edit_message_text(
+            text,
+            parse_mode='HTML',
+            reply_markup=get_courier_back_button()
+        )
     else:
-        await update.message.reply_text(text, parse_mode='HTML', reply_markup=get_courier_back_button())
+        await update.message.reply_text(
+            text,
+            parse_mode='HTML',
+            reply_markup=get_courier_back_button()
+        )
 
 async def courier_show_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает телефон клиента"""
