@@ -895,7 +895,7 @@ async def main(set_webhook=True):
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     
     # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
+    #app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_command_handler), group=2)
 
     # ============== ОБРАБОТЧИК ТЕКСТОВЫХ КОМАНД (русские аналоги) ==============
     # ВНИМАНИЕ: временно отключено для проверки работы ввода адреса
