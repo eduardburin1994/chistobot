@@ -629,6 +629,13 @@ async def new_address_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    user_id = query.from_user.id
+    from utils.order_state import order_state
+    # Сохраняем состояние
+    order_state.save_state(user_id, NEW_ADDRESS, {})
+    context.user_data['conversation_state'] = NEW_ADDRESS
+    context.user_data['user_id'] = user_id
+    
     await query.edit_message_text(
         "🏠 Введите новый адрес (улица и дом):\n"
         "Например: ул. Ленина, д. 10\n\n"
