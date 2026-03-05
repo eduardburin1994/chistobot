@@ -566,141 +566,162 @@ def check_database_integrity():
         conn.close()
 
 def init_db():
-    """Создание таблиц в базе данных PostgreSQL"""
-    conn = get_connection_with_retry()  # ← Вот эта замена
-    if not conn:
-        print("❌ Не удалось подключиться к БД для инициализации")
-        return
-    
-    cur = conn.cursor()
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id BIGINT PRIMARY KEY,
-            username TEXT,
-            first_name TEXT,
-            last_name TEXT,
-            phone TEXT,
-            street_address TEXT,
-            entrance TEXT,
-            floor TEXT,
-            apartment TEXT,
-            intercom TEXT,
-            registered_date TIMESTAMP
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            message_id SERIAL PRIMARY KEY,
-            user_id BIGINT,
-            user_message TEXT,
-            admin_reply TEXT,
-            status TEXT DEFAULT 'new',
-            created_at TIMESTAMP,
-            replied_at TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            order_id SERIAL PRIMARY KEY,
-            user_id BIGINT,
-            client_name TEXT,
-            phone TEXT,
-            street_address TEXT,
-            entrance TEXT,
-            floor TEXT,
-            apartment TEXT,
-            intercom TEXT,
-            order_date TEXT,
-            order_time TEXT,
-            bags_count INTEGER,
-            price INTEGER,
-            payment_method TEXT DEFAULT 'cash',
-            payment_status TEXT DEFAULT 'pending',
-            payment_id TEXT,
-            status TEXT DEFAULT 'new',
-            created_at TIMESTAMP,
-            courier_id BIGINT,
-            taken_at TIMESTAMP,
-            confirmed_by BIGINT,
-            confirmed_by_type TEXT DEFAULT 'admin',
-            confirmed_at TIMESTAMP,
-            completed_by BIGINT,
-            completed_by_type TEXT,
-            completed_at TIMESTAMP,
-            cancelled_by BIGINT,
-            cancelled_at TIMESTAMP,
-            cancel_reason TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS busy_slots (
-            slot_id SERIAL PRIMARY KEY,
-            slot_date TEXT,
-            slot_time TEXT,
-            order_id INTEGER UNIQUE,
-            FOREIGN KEY (order_id) REFERENCES orders(order_id)
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS blacklist (
-            user_id BIGINT PRIMARY KEY,
-            reason TEXT,
-            added_date TIMESTAMP,
-            added_by BIGINT
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS broadcasts (
-            broadcast_id SERIAL PRIMARY KEY,
-            admin_id BIGINT,
-            message_text TEXT,
-            sent_date TIMESTAMP,
-            recipients_count INTEGER
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS favorite_addresses (
-            address_id SERIAL PRIMARY KEY,
-            user_id BIGINT,
-            address_name TEXT,
-            street_address TEXT,
-            entrance TEXT,
-            floor TEXT,
-            apartment TEXT,
-            intercom TEXT,
-            created_date TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
-    cur.execute('''
-        CREATE INDEX IF NOT EXISTS idx_busy_slots_datetime 
-        ON busy_slots (slot_date, slot_time)
-    ''')
-    
-    cur.execute('''
-        CREATE INDEX IF NOT EXISTS idx_orders_courier 
-        ON orders(courier_id) WHERE courier_id IS NOT NULL
-    ''')
-    
-    cur.execute('''
-        CREATE INDEX IF NOT EXISTS idx_orders_active 
-        ON orders(order_date, status) WHERE status IN ('new', 'confirmed')
-    ''')
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("✅ Таблицы PostgreSQL созданы или уже существуют")
+    """Создание таблиц в базе данных PostgreSQL с повторными попытками"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            conn = get_connection_with_retry()
+            if not conn:
+                print("❌ Не удалось подключиться к БД для инициализации")
+                return
+            
+            cur = conn.cursor()
+            
+            # Таблица пользователей
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id BIGINT PRIMARY KEY,
+                    username TEXT,
+                    first_name TEXT,
+                    last_name TEXT,
+                    phone TEXT,
+                    street_address TEXT,
+                    entrance TEXT,
+                    floor TEXT,
+                    apartment TEXT,
+                    intercom TEXT,
+                    registered_date TIMESTAMP
+                )
+            ''')
+            
+            # Таблица сообщений
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS messages (
+                    message_id SERIAL PRIMARY KEY,
+                    user_id BIGINT,
+                    user_message TEXT,
+                    admin_reply TEXT,
+                    status TEXT DEFAULT 'new',
+                    created_at TIMESTAMP,
+                    replied_at TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (user_id)
+                )
+            ''')
+            
+            # Таблица заказов
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS orders (
+                    order_id SERIAL PRIMARY KEY,
+                    user_id BIGINT,
+                    client_name TEXT,
+                    phone TEXT,
+                    street_address TEXT,
+                    entrance TEXT,
+                    floor TEXT,
+                    apartment TEXT,
+                    intercom TEXT,
+                    order_date TEXT,
+                    order_time TEXT,
+                    bags_count INTEGER,
+                    price INTEGER,
+                    payment_method TEXT DEFAULT 'cash',
+                    payment_status TEXT DEFAULT 'pending',
+                    payment_id TEXT,
+                    status TEXT DEFAULT 'new',
+                    created_at TIMESTAMP,
+                    courier_id BIGINT,
+                    taken_at TIMESTAMP,
+                    confirmed_by BIGINT,
+                    confirmed_by_type TEXT DEFAULT 'admin',
+                    confirmed_at TIMESTAMP,
+                    completed_by BIGINT,
+                    completed_by_type TEXT,
+                    completed_at TIMESTAMP,
+                    cancelled_by BIGINT,
+                    cancelled_at TIMESTAMP,
+                    cancel_reason TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users (user_id)
+                )
+            ''')
+            
+            # Таблица занятых слотов
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS busy_slots (
+                    slot_id SERIAL PRIMARY KEY,
+                    slot_date TEXT,
+                    slot_time TEXT,
+                    order_id INTEGER UNIQUE,
+                    FOREIGN KEY (order_id) REFERENCES orders(order_id)
+                )
+            ''')
+            
+            # Таблица черного списка
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS blacklist (
+                    user_id BIGINT PRIMARY KEY,
+                    reason TEXT,
+                    added_date TIMESTAMP,
+                    added_by BIGINT
+                )
+            ''')
+            
+            # Таблица рассылок
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS broadcasts (
+                    broadcast_id SERIAL PRIMARY KEY,
+                    admin_id BIGINT,
+                    message_text TEXT,
+                    sent_date TIMESTAMP,
+                    recipients_count INTEGER
+                )
+            ''')
+            
+            # Таблица избранных адресов
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS favorite_addresses (
+                    address_id SERIAL PRIMARY KEY,
+                    user_id BIGINT,
+                    address_name TEXT,
+                    street_address TEXT,
+                    entrance TEXT,
+                    floor TEXT,
+                    apartment TEXT,
+                    intercom TEXT,
+                    created_date TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (user_id)
+                )
+            ''')
+            
+            # Индексы
+            cur.execute('''
+                CREATE INDEX IF NOT EXISTS idx_busy_slots_datetime 
+                ON busy_slots (slot_date, slot_time)
+            ''')
+            
+            cur.execute('''
+                CREATE INDEX IF NOT EXISTS idx_orders_courier 
+                ON orders(courier_id) WHERE courier_id IS NOT NULL
+            ''')
+            
+            cur.execute('''
+                CREATE INDEX IF NOT EXISTS idx_orders_active 
+                ON orders(order_date, status) WHERE status IN ('new', 'confirmed')
+            ''')
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            print("✅ Таблицы PostgreSQL созданы или уже существуют")
+            return  # Успешно завершаем функцию
+            
+        except Exception as e:
+            print(f"⚠️ Попытка {attempt + 1} создания таблиц не удалась: {e}")
+            if attempt < max_retries - 1:
+                print(f"   Повтор через 3 секунд...")
+                time.sleep(3)
+            else:
+                print("❌ Не удалось создать таблицы после всех попыток")
+                raise
 
 # =============== ФУНКЦИИ ДЛЯ РАБОТЫ СО СЛОТАМИ ===============
 
