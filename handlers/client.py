@@ -1720,6 +1720,38 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='back_to_menu')]]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор заказа для детального просмотра"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    import database as db
+    orders = db.get_user_orders(user_id)
+    
+    if not orders:
+        await query.edit_message_text(
+            "📭 У вас нет заказов",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='my_orders_detail')
+            ]])
+        )
+        return
+    
+    keyboard = []
+    for order in orders[:5]:
+        order_id, _, _, _, date, time, bags, price, status, _ = order
+        status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+        button_text = f"{status_emoji} #{order_id} от {date} {time} ({bags} меш.)"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f'order_detail_{order_id}')])
+    
+    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data='my_orders_detail')])
+    
+    await query.edit_message_text(
+        "Выберите заказ для просмотра:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение сообщения от клиента"""
     user_id = update.effective_user.id
