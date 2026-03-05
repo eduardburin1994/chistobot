@@ -433,6 +433,65 @@ async def button_handler(update: Update, context):
         await back_to_bags(update, context)
         return ConversationHandler.END
     
+    # ========== ВОЗВРАТ К ВЫБОРУ ВРЕМЕНИ ==========
+    if query.data in ['back_to_times', 'back_to_dates']:
+        print(f"⏪ ВОЗВРАТ К ВЫБОРУ ВРЕМЕНИ: {query.data}")
+        
+        from config import user_data
+        user_id = query.from_user.id
+        
+        # Получаем сохраненную дату
+        order_date = user_data.get(user_id, {}).get('order_date')
+        
+        if not order_date:
+            # Если дата не сохранена - возвращаем к выбору даты
+            from keyboards.client_keyboards import create_date_keyboard
+            await query.edit_message_text(
+                "📅 Выберите дату:",
+                reply_markup=InlineKeyboardMarkup(create_date_keyboard())
+            )
+            return DATE
+        
+        # Получаем доступные слоты для этой даты
+        import database as db
+        available_slots, slot_info = db.get_available_slots(order_date)
+        
+        if not available_slots:
+            # Если нет слотов - возвращаем к выбору другой даты
+            from keyboards.client_keyboards import create_date_keyboard
+            await query.edit_message_text(
+                f"❌ На {order_date} больше нет свободных слотов.\n"
+                f"Пожалуйста, выберите другую дату:",
+                reply_markup=InlineKeyboardMarkup(create_date_keyboard())
+            )
+            return DATE
+        
+        # Показываем доступные слоты времени
+        time_keyboard = []
+        for slot in available_slots:
+            time_keyboard.append([InlineKeyboardButton(slot, callback_data=f'time_{slot}')])
+        
+        # Добавляем кнопку возврата к датам
+        time_keyboard.append([InlineKeyboardButton("◀️ К выбору даты", callback_data="back_to_date_selection")])
+        
+        await query.edit_message_text(
+            f"📅 Дата: {order_date}\n\n"
+            f"⏰ Выберите удобное время:",
+            reply_markup=InlineKeyboardMarkup(time_keyboard)
+        )
+        return TIME
+    
+    # ========== ВОЗВРАТ К ВЫБОРУ ДАТЫ ==========
+    if query.data == 'back_to_date_selection':
+        print(f"📅 ВОЗВРАТ К ВЫБОРУ ДАТЫ")
+        
+        from keyboards.client_keyboards import create_date_keyboard
+        await query.edit_message_text(
+            "📅 Выберите дату:",
+            reply_markup=InlineKeyboardMarkup(create_date_keyboard())
+        )
+        return DATE
+    
     # Кнопки админки
     if query.data == 'admin_write_to_user':
         await admin_write_to_user(update, context)
