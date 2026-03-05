@@ -4,7 +4,6 @@ from config import admin_data, WORK_HOURS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 import database as db
-from config import admin_data
 import datetime
 from constants import BLACKLIST_REMOVE, BROADCAST_MESSAGE, BLACKLIST_ADD, EDIT_WORKING_HOURS_START, EDIT_WORKING_HOURS_END, SEND_MESSAGE_TO_USER, ENTER_USER_ID_FOR_MESSAGE
 import io
@@ -1778,8 +1777,6 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # КНОПКИ ДЛЯ КЛИЕНТА
         keyboard = []
 
-        # Кнопка "Написать сообщение"
-        keyboard.append([InlineKeyboardButton("💬 Написать сообщение", callback_data=f'write_to_user_{user_id}')])
 
         # Кнопка "Заблокировать/Разблокировать"
         if user_id in admin_data['blocked_users']:
@@ -1787,7 +1784,6 @@ async def admin_clients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             keyboard.append([InlineKeyboardButton("🔒 Заблокировать", callback_data=f'block_user_{user_id}')])
         
-        # 👇 ЭТА КНОПКА ДОЛЖНА БЫТЬ ЗДЕСЬ (ПОСЛЕ if-else, НО ВНУТРИ keyboard) 👇
         keyboard.append([InlineKeyboardButton("🗑️ ПОЛНОСТЬЮ УДАЛИТЬ", callback_data=f'delete_user_{user_id}')])
         
         # Кнопка "Написать по ID" (если нужна)
