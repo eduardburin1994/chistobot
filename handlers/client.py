@@ -118,7 +118,7 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"✅ Найдены сохранённые данные: имя={user_info[2]}, телефон={user_info[4]}")
         
         # Получаем избранные адреса пользователя
-        favorites = db.get_user_favorites(user_id)
+        favorites = db.get_user_favorite_addresses(user_id)
         
         if not favorites:
             # Если нет избранных адресов - сразу переходим к вводу нового адреса
@@ -1750,7 +1750,7 @@ async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         # Показываем меню избранного
         from keyboards.client_keyboards import get_favorites_menu_keyboard
-        favorites = db.get_user_favorites(user_id)
+        favorites = db.get_user_favorite_addresses(user_id)
         
         await update.message.reply_text(
             "📍 <b>Ваши избранные адреса:</b>\n\n"
