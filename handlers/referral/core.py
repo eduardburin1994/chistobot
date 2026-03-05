@@ -36,48 +36,92 @@ async def referral_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def referral_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает реферальную информацию пользователя"""
     query = update.callback_query
-    user_id = query.from_user.id
+    await query.answer()
     
-    # Получаем или создаём реферальный код
-    code = db.get_or_create_referral_code(user_id)
+    user_id = query.from_user.id
+    print(f"🎁 referral_info для пользователя {user_id}")
+    
+    import database as db
+    
+    # ПРИНУДИТЕЛЬНО создаём или получаем реферальный код
+    print(f"🔑 Получаем/создаём реферальный код для {user_id}")
+    referral_code = db.get_or_create_referral_code(user_id)
+    
+    if not referral_code:
+        print(f"❌ Не удалось создать реферальный код для {user_id}")
+        await query.edit_message_text(
+            "❌ Не удалось создать реферальный код. Попробуйте позже.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='back_to_menu')
+            ]])
+        )
+        return
+    
+    print(f"✅ Реферальный код: {referral_code}")
     
     # Получаем статистику
+    print(f"📊 Получаем статистику для {user_id}")
     stats = db.get_referral_stats(user_id)
     
-    # Создаём ссылку
-    bot_username = context.bot.username
-    referral_link = f"https://t.me/{bot_username}?start=ref_{code}"
+    if not stats:
+        print(f"📊 Статистика не найдена, создаём базовую")
+        stats = {
+            'code': referral_code,
+            'balance': 0,
+            'total_earned': 0,
+            'level1': 0,
+            'level2': 0,
+            'recent': [],
+            'earnings': []
+        }
+    else:
+        print(f"📊 Статистика получена: баланс={stats['balance']}, level1={stats['level1']}")
     
-    # Формируем текст
+    # Формируем реферальную ссылку
+    bot_username = (await context.bot.get_me()).username
+    referral_link = f"https://t.me/{bot_username}?start={referral_code}"
+    print(f"🔗 Ссылка: {referral_link}")
+    
+    # Текст сообщения
     text = (
-        "🎁 <b>РЕФЕРАЛЬНАЯ ПРОГРАММА</b>\n\n"
-        "Приглашай друзей и получай баллы!\n\n"
-        "📊 <b>Твоя статистика:</b>\n"
-        f"• 👥 Рефералов 1 уровня: {stats['level1'] if stats else 0}\n"
-        f"• 👥 Рефералов 2 уровня: {stats['level2'] if stats else 0}\n"
-        f"• 💰 Текущий баланс: <b>{stats['balance'] if stats else 0} баллов</b>\n"
-        f"• 🏆 Всего заработано: {stats['total_earned'] if stats else 0} баллов\n\n"
-        "🔗 <b>Твоя реферальная ссылка:</b>\n"
+        "🎁 <b>Реферальная программа</b>\n\n"
+        f"🔗 <b>Ваша ссылка:</b>\n"
         f"<code>{referral_link}</code>\n\n"
-        "📋 <b>Как это работает:</b>\n"
-        "1️⃣ Друг переходит по ссылке и регистрируется\n"
-        "2️⃣ Когда друг делает первый заказ — ты получаешь <b>100 баллов</b>\n"
-        "3️⃣ Если друг тоже приглашает кого-то — ты получаешь <b>30 баллов</b> за реферала 2 уровня\n"
-        "4️⃣ 300 баллов = <b>бесплатный вывоз</b>!\n"
-        "5️⃣ Баллы можно использовать как скидку (1 балл = 1 рубль)\n\n"
-        "👇 <b>Нажми на ссылку, чтобы скопировать</b>"
+        f"💰 <b>Ваш баланс:</b> {stats['balance']} баллов\n"
+        f"📊 <b>Всего заработано:</b> {stats['total_earned']} баллов\n"
+        f"👥 <b>Приглашено друзей:</b> {stats['level1']}\n"
+        f"👥 <b>Рефералы 2 уровня:</b> {stats['level2']}\n\n"
+        f"❓ <b>Как это работает?</b>\n"
+        f"• За друга (1 уровень) — 100 баллов\n"
+        f"• За друга друга (2 уровень) — 30 баллов\n"
+        f"• 300 баллов = бесплатный вывоз\n"
+        f"• Баллы можно использовать как скидку"
     )
     
-    # Клавиатура
-    from handlers.referral.keyboard import get_referral_keyboard
-    keyboard = get_referral_keyboard()
+    # Добавляем информацию о последних рефералах, если есть
+    if stats.get('recent') and len(stats['recent']) > 0:
+        text += "\n\n📋 <b>Последние приглашённые:</b>\n"
+        for ref in stats['recent'][:3]:
+            name = ref[0] or f"@{ref[1]}" if ref[1] else "Пользователь"
+            date = ref[2].strftime("%d.%m.%Y") if ref[2] else "недавно"
+            rewarded = "✅" if ref[3] else "⏳"
+            text += f"{rewarded} {name} — {date}\n"
     
-    await query.edit_message_text(
-        text,
-        parse_mode='HTML',
-        reply_markup=keyboard,
-        disable_web_page_preview=True
-    )
+    keyboard = [
+        [
+            InlineKeyboardButton("📊 История", callback_data='referral_history'),
+            InlineKeyboardButton("🏆 Топ", callback_data='referral_top')
+        ],
+        [InlineKeyboardButton("❓ Подробнее", callback_data='referral_help')],
+        [InlineKeyboardButton("◀️ Назад", callback_data='back_to_menu')]
+    ]
+    
+    try:
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+        print(f"✅ Сообщение отправлено пользователю {user_id}")
+    except Exception as e:
+        print(f"❌ Ошибка отправки сообщения: {e}")
+        await query.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def referral_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает историю рефералов и начислений"""

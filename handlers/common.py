@@ -14,77 +14,121 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Полноценный обработчик команды /start"""
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработчик команды /start"""
     user = update.effective_user
-    
-    # Проверяем, есть ли реферальный код
     args = context.args
-    if args and args[0].startswith('ref_'):
-        referral_code = args[0].replace('ref_', '')
-        # Регистрируем реферала
-        referrer_id = db.register_referral(referral_code, user.id)
-        if referrer_id:
-            await update.message.reply_text(
-                "🎉 Вы пришли по приглашению друга!\n"
-                "После первого заказа ваш друг получит 100 баллов."
-            )
     
-    # Проверяем, есть ли пользователь в базе
+    print(f"🚀 START от пользователя {user.id} (@{user.username})")
+    print(f"📎 Аргументы команды: {args}")
+    print(f"📎 Тип args: {type(args)}")
+    print(f"📎 Длина args: {len(args) if args else 0}")
+    
+    # Проверяем, есть ли реферальный код в аргументах
+    if args and len(args) > 0:
+        print(f"🎯 Получен аргумент: {args[0]}")
+        
+        # Реферальные коды начинаются с CHISTO
+        if args[0].startswith('CHISTO'):
+            referral_code = args[0]
+            print(f"🎯 Найден реферальный код: {referral_code}")
+            
+            import database as db
+            # Сохраняем код в context.user_data для последующего использования
+            context.user_data['referral_code'] = referral_code
+            print(f"💾 Реферальный код сохранён в context.user_data")
+            
+            # Пытаемся сразу зарегистрировать реферала
+            try:
+                referrer_id = db.register_referral(referral_code, user.id)
+                if referrer_id:
+                    print(f"✅ Пользователь {user.id} пришёл по реферальному коду от {referrer_id}")
+                    
+                    # Получаем информацию о пригласившем
+                    conn = db.get_connection()
+                    cur = conn.cursor()
+                    cur.execute('SELECT first_name, username FROM users WHERE user_id = %s', (referrer_id,))
+                    referrer_info = cur.fetchone()
+                    cur.close()
+                    conn.close()
+                    
+                    if referrer_info:
+                        referrer_name = referrer_info[0] or referrer_info[1] or f"пользователя {referrer_id}"
+                        await update.message.reply_text(
+                            f"🎁 Вы перешли по приглашению от <b>{referrer_name}</b>!\n"
+                            f"После первого заказа {referrer_name} получит 100 бонусных баллов.",
+                            parse_mode='HTML'
+                        )
+                else:
+                    print(f"❌ Не удалось зарегистрировать реферала")
+                    if referral_code == context.user_data.get('referral_code'):
+                        print(f"⚠️ Возможно, код принадлежит самому пользователю или уже использован")
+            except Exception as e:
+                print(f"❌ Ошибка при регистрации реферала: {e}")
+        else:
+            print(f"ℹ️ Аргумент не является реферальным кодом: {args[0]}")
+    
+    # Добавляем пользователя в базу данных
+    import database as db
+    try:
+        db.add_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        )
+        
+        # Если есть username, обновляем его
+        if user.username:
+            db.update_user_username(user.id, user.username)
+            
+        print(f"✅ Пользователь {user.id} обработан")
+    except Exception as e:
+        print(f"❌ Ошибка при добавлении пользователя: {e}")
+    
+    # Получаем информацию о пользователе для проверки статуса
     user_info = db.get_user_by_id(user.id)
     
-    # Если пользователя нет в базе - добавляем
-    if not user_info:
-        db.add_user(user.id, user.username, user.first_name, user.last_name)
-        print(f"✅ Новый пользователь {user.id} добавлен в базу")
-        
-        welcome_text = (
-            f"👋 <b>Добро пожаловать в ЧистоBOT, {user.first_name}!</b>\n\n"
-            f"🚶‍♂️ Я помогу вам быстро и удобно <b>избавиться от накопившегося мусора</b> в Твери.\n\n"
-            f"📍 <b>Зона обслуживания:</b> <u>Южный микрорайон</u>\n"
-            f"Мы работаем на следующих улицах:\n"
-            f"• Октябрьский проспект\n"
-            f"• Улица Можайского\n"
-            f"• Улица Королева\n"
-            f"• Улица Левитана\n"
-            f"• Бульвар Гусева\n"
-            f"• Улица Псковская\n"
-            f"• Улица С.Я. Лемешева\n\n"
-            f"📝 <b>Нажмите кнопку ниже, чтобы начать работу:</b>"
+    # Проверяем, не заблокирован ли пользователь
+    if db.is_user_blacklisted(user.id):
+        await update.message.reply_text(
+            "⛔ Вы заблокированы в этом боте.\n"
+            "Если вы считаете, что это ошибка, свяжитесь с поддержкой."
         )
-    else:
-        print(f"✅ Существующий пользователь {user.id} вернулся в бота")
-        welcome_text = (
-            f"👋 <b>С возвращением, {user.first_name}!</b>\n\n"
-            f"🚶‍♂️ <b>ЧистоBOT</b> — твой помощник по выносу мусора в Твери!\n"
-            f"Курьер заберёт пакеты прямо от твоей двери и донесёт до бака.\n\n"
-            f"📍 <b>Зона обслуживания:</b> <u>Южный микрорайон</u>\n\n"
-            f"✨ <b>Что я умею:</b>\n"
-            f"• 📦 Заказать вынос пакетов с мусором\n"
-            f"• 📅 Выбрать удобную дату и время\n"
-            f"• 💰 Рассчитать стоимость сразу\n"
-            f"• 📋 Посмотреть историю заказов\n"
-            f"• 💬 Связаться с поддержкой\n\n"
-            f"<b>Ну что, избавимся от мусора без хлопот?</b>"
-        )
-    
-    # Проверка на блокировку
-    if user.id in admin_data.get('blocked_users', []):
-        await update.message.reply_text("⛔ Вы заблокированы в этом боте.")
         return ConversationHandler.END
     
-    # Inline-кнопки для ответа на приветствие
+    # Приветственное сообщение
+    from config import admin_data
+    is_admin = user.id in admin_data['admins']
+    
+    # Проверяем, есть ли у пользователя сохранённые данные
+    has_saved_data = user_info and user_info[4]  # есть телефон
+    
+    if has_saved_data:
+        welcome_text = (
+            f"👋 С возвращением, {user.first_name}!\n\n"
+            f"Я помогу вам быстро и удобно заказать вывоз мусора.\n"
+            f"Хотите оформить заказ?"
+        )
+    else:
+        welcome_text = (
+            f"👋 Привет, {user.first_name}!\n\n"
+            f"Я бот для заказа вывоза мусора. Работаем в Южном микрорайоне.\n"
+            f"Хотите оформить заказ?"
+        )
+    
+    # Клавиатура с вариантами
     keyboard = [
         [
-            InlineKeyboardButton("✅ ДА, давай!", callback_data='welcome_yes'),
-            InlineKeyboardButton("🚶 Сам вынесу", callback_data='welcome_no')
+            InlineKeyboardButton("✅ Да, давай!", callback_data='welcome_yes'),
+            InlineKeyboardButton("❌ Нет, спасибо", callback_data='welcome_no')
         ]
     ]
     
     await update.message.reply_text(
         welcome_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='HTML'
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
     
     return WELCOME
@@ -405,6 +449,22 @@ async def show_rules_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = get_main_keyboard(update.effective_user.id in admin_data['admins'])
     await update.message.reply_text(rules_text, parse_mode='HTML', reply_markup=keyboard)
 
+async def test_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Тестовый хендлер для проверки рефералов"""
+    user = update.effective_user
+    args = context.args
+    
+    print(f"🧪 ТЕСТОВЫЙ START от {user.id}")
+    print(f"🧪 Аргументы: {args}")
+    print(f"🧪 Тип args: {type(args)}")
+    print(f"🧪 Длина: {len(args) if args else 0}")
+    
+    if args:
+        for i, arg in enumerate(args):
+            print(f"🧪 arg[{i}]: '{arg}' (тип: {type(arg)})")
+    
+    await update.message.reply_text(f"Тест: получены аргументы: {args}")
+
 async def show_contact_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Версия show_contact для reply-кнопок"""
     contact_text = (
@@ -422,3 +482,4 @@ async def show_contact_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    

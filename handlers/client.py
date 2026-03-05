@@ -201,6 +201,8 @@ async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор адреса при заказе (из избранного или новый)"""
+    print(f"📍 choose_address ВЫЗВАНА для пользователя {update.effective_user.id}")
+    
     # Проверяем, откуда пришел вызов - из callback или из сообщения
     if update.callback_query:
         # Если из callback (обычный путь)
@@ -208,44 +210,61 @@ async def choose_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         user_id = query.from_user.id
         message_func = query.edit_message_text
+        print(f"📍 Вызов из callback_query")
     else:
         # Если из сообщения (после ввода телефона)
         user_id = update.effective_user.id
         message_func = update.message.reply_text
+        print(f"📍 Вызов из message")
     
     import database as db
     
     # Получаем избранные адреса пользователя
     favorites = db.get_user_favorite_addresses(user_id)
+    print(f"📍 Найдено избранных адресов: {len(favorites)}")
     
-    text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
-    
-    keyboard = []
-    
-    # Добавляем кнопки с избранными адресами
-    if favorites:
-        for addr in favorites[:5]:
-            addr_id, name, street, entrance, floor, apt, intercom, _ = addr
-            
-            # Формируем краткое описание адреса (только улица)
-            short_address = street  # Убираем добавление квартиры, так как она уже есть в названии
-            
-            button_text = f"{name} - {short_address}"
-            keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
-        
-        # Кнопка для нового адреса
-        keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
-        keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
+    if not favorites:
+        # Если нет избранных адресов - сразу переходим к вводу нового
+        print(f"📍 Нет избранных адресов, переходим к вводу нового")
         
         # Сохраняем состояние
-        order_state.save_state(user_id, SELECT_ADDRESS, user_data.get(user_id, {}))
+        from utils.order_state import order_state
+        order_state.save_state(user_id, NEW_ADDRESS, {})
+        context.user_data['conversation_state'] = NEW_ADDRESS
         
         await message_func(
-            text,
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "🏠 У вас пока нет сохраненных адресов.\n\n"
+            "Введите адрес (улица и номер дома):\n"
+            "<i>Например: ул. Ленина, д. 10</i>",
+            parse_mode='HTML'
         )
-        return SELECT_ADDRESS
+        return NEW_ADDRESS
+    
+    # Если есть избранные адреса - показываем их
+    text = "📍 <b>Выберите адрес для вывоза:</b>\n\n"
+    keyboard = []
+    
+    for addr in favorites[:5]:
+        addr_id, name, street, entrance, floor, apt, intercom, _ = addr
+        short_address = street
+        button_text = f"{name} - {short_address}"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f'select_fav_{addr_id}')])
+    
+    # Кнопка для нового адреса
+    keyboard.append([InlineKeyboardButton("➕ Ввести новый адрес", callback_data='new_address_start')])
+    keyboard.append([InlineKeyboardButton("◀️ Отмена", callback_data='back_to_menu')])
+    
+    # Сохраняем состояние
+    from utils.order_state import order_state
+    order_state.save_state(user_id, SELECT_ADDRESS, {})
+    context.user_data['conversation_state'] = SELECT_ADDRESS
+    
+    await message_func(
+        text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return SELECT_ADDRESS
 
 async def select_favorite_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор избранного адреса с проверкой района"""
@@ -884,31 +903,54 @@ async def payment_method_handler(update: Update, context: ContextTypes.DEFAULT_T
         order_state.save_state(user_id, CONFIRM_ORDER, user_data[user_id])
         
         # ===== ПРОВЕРКА БАЛАНСА =====
+        print(f"💳 Проверяем баланс для пользователя {user_id}")
+
+        # Получаем соединение с БД напрямую для отладки
         conn = db.get_connection()
         cur = conn.cursor()
         try:
+            # Проверяем, есть ли вообще запись о пользователе
+            cur.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+            user_data_check = cur.fetchone()
+            print(f"📊 Данные пользователя в БД: {user_data_check}")
+            
+            # Проверяем конкретно баланс
             cur.execute('SELECT referral_balance FROM users WHERE user_id = %s', (user_id,))
-            balance = cur.fetchone()
-            if balance and balance[0] > 0:
-                user_data[user_id]['bonus_balance'] = balance[0]
+            result = cur.fetchone()
+            print(f"💰 Результат запроса баланса: {result}")
+            
+            if result:
+                balance = result[0]
+                print(f"💰 Баланс пользователя {user_id}: {balance}")
                 
-                keyboard = [
-                    [
-                        InlineKeyboardButton(f"✅ Использовать {balance[0]} баллов", callback_data='use_bonus_yes'),
-                        InlineKeyboardButton("❌ Не использовать", callback_data='use_bonus_no')
+                if balance > 0:
+                    user_data[user_id]['bonus_balance'] = balance
+                    print(f"🎁 Найден баланс {balance}, показываем предложение использовать баллы")
+                    
+                    keyboard = [
+                        [
+                            InlineKeyboardButton(f"✅ Использовать {balance} баллов", callback_data='use_bonus_yes'),
+                            InlineKeyboardButton("❌ Не использовать", callback_data='use_bonus_no')
+                        ]
                     ]
-                ]
+                    
+                    await query.edit_message_text(
+                        f"🎁 <b>У вас есть {balance} бонусных баллов!</b>\n\n"
+                        f"1 балл = 1 рубль скидки\n"
+                        f"Хотите использовать их для этого заказа?",
+                        parse_mode='HTML',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    return USE_BONUS
+                else:
+                    print(f"ℹ️ Баланс {balance} <= 0, пропускаем")
+            else:
+                print(f"❌ Пользователь {user_id} не найден в таблице users")
                 
-                await query.edit_message_text(
-                    f"🎁 <b>У вас есть {balance[0]} бонусных баллов!</b>\n\n"
-                    f"1 балл = 1 рубль скидки\n"
-                    f"Хотите использовать их для этого заказа?",
-                    parse_mode='HTML',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                return USE_BONUS
         except Exception as e:
             print(f"❌ Ошибка проверки баланса: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             cur.close()
             conn.close()
@@ -1279,8 +1321,8 @@ async def final_confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             if referred_by and referred_by[0]:
                 referrer_id = referred_by[0]
-                # Начисляем баллы пригласившему
-                db.process_referral_reward(referrer_id, user_id, order_id)
+                # Начисляем баллы пригласившему (передаём context для уведомлений)
+                db.process_referral_reward(referrer_id, user_id, order_id, context)
                 print(f"✅ Начислены баллы за реферала {user_id} пользователю {referrer_id}")
         except Exception as e:
             print(f"❌ Ошибка проверки реферала: {e}")
