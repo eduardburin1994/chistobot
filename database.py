@@ -6,6 +6,15 @@ import psycopg2.extras
 from urllib.parse import urlparse
 import random
 import string
+from pathlib import Path
+print("🔍 Проверка файла .env:")
+env_file = Path('.') / '.env'
+print(f"   Полный путь: {env_file.absolute()}")
+print(f"   Файл существует: {env_file.exists()}")
+if env_file.exists():
+    print(f"   Содержимое (первые 50 символов):")
+    with open(env_file, 'r') as f:
+        print(f"   {f.read(50)}...")
 print("🔍 Загружаем DATABASE_URL из os.getenv():", os.getenv('DATABASE_URL'))
 print("🔍 Загружаем DATABASE_URL из os.environ.get():", os.environ.get('DATABASE_URL'))
 # Получаем строку подключения из переменной окружения (ИСПОЛЬЗУЕМ os.getenv!)
