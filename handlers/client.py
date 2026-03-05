@@ -1884,15 +1884,20 @@ async def support_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать список заказов пользователя"""
-    query = update.callback_query
-    await query.answer()
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        user_id = query.from_user.id
+        message_func = query.edit_message_text
+    else:
+        user_id = update.effective_user.id
+        message_func = update.message.reply_text
     
-    user_id = query.from_user.id
     import database as db
     orders = db.get_user_orders(user_id)
     
     if not orders:
-        await query.edit_message_text(
+        await message_func(
             "📭 У вас пока нет заказов.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("◀️ В главное меню", callback_data='back_to_menu')
@@ -1902,12 +1907,19 @@ async def my_orders_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = "📋 <b>Ваши заказы:</b>\n\n"
     for order in orders[:5]:
-        order_id, _, _, _, date, time, bags, price, status, _ = order
+        # Безопасная распаковка через индексы
+        order_id = order[0]
+        date = order[9] if len(order) > 9 else ''
+        time = order[10] if len(order) > 10 else ''
+        bags = order[11] if len(order) > 11 else 0
+        price = order[12] if len(order) > 12 else 0
+        status = order[13] if len(order) > 13 else 'unknown'
+        
         status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
         text += f"{status_emoji} #{order_id} — {date} {time}, {bags} мешков — {price} ₽\n"
     
     keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data='back_to_menu')]]
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    await message_func(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выбор заказа для детального просмотра"""
