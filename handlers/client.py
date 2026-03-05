@@ -346,19 +346,26 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PAYMENT_METHOD
 
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    print(f"🔥🔥🔥 new_address ВЫЗВАНА для пользователя {update.effective_user.id}")
     """Получение адреса"""
+    print(f"🔥🔥🔥 new_address ВЫЗВАНА для пользователя {update.effective_user.id}")
+    print(f"🔥🔥🔥 Тип update: {type(update)}")
+    print(f"🔥🔥🔥 Есть message: {hasattr(update, 'message') and update.message is not None}")
+    
     try:
         user_id = update.effective_user.id
+        print(f"🔥 user_id: {user_id}")
+        
+        # Проверяем наличие сообщения
         if not update.message:
             print(f"❌ new_address: нет сообщения")
             return ConversationHandler.END
             
         address = update.message.text.strip()
-        print(f"🏠 new_address: получен адрес от пользователя {user_id}: {address}")
+        print(f"🏠 new_address: получен адрес от пользователя {user_id}: '{address}'")
         
         # Проверяем, что адрес не пустой
         if not address or len(address) < 5:
+            print(f"❌ new_address: адрес слишком короткий: '{address}'")
             await update.message.reply_text(
                 "❌ Пожалуйста, введите корректный адрес (минимум 5 символов).\n"
                 "Например: <i>ул. Ленина, д. 10</i>",
@@ -367,80 +374,80 @@ async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             return NEW_ADDRESS
             
         from config import user_data
+        print(f"🔥 user_data до сохранения: {user_data.get(user_id, {})}")
+        
         if user_id not in user_data:
             user_data[user_id] = {}
+            print(f"🔥 создана новая запись для {user_id}")
             
         # Сохраняем адрес
         user_data[user_id]['street_address'] = address
         print(f"✅ new_address: адрес сохранён: {address}")
+        print(f"🔥 user_data после сохранения: {user_data[user_id]}")
+        
+        # Проверяем флаг adding_from_favorites
+        if user_data[user_id].get('adding_from_favorites'):
+            print(f"⭐ Добавление адреса в избранное из меню избранного")
+            user_data[user_id]['adding_from_favorites'] = False
+            await update.message.reply_text(
+                f"✅ Адрес принят: <b>{address}</b>\n\n"
+                f"📝 Теперь введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):",
+                parse_mode='HTML'
+            )
+            return FAVORITE_NAME
+            
+        # Проверка района
+        if not is_address_allowed(address):
+            print(f"❌ Адрес не в зоне обслуживания: {address}")
+            streets_list = (
+                "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
+                "• Октябрьский проспект\n"
+                "• Улица Можайского\n"
+                "• Улица Королева\n"
+                "• Улица Левитана\n"
+                "• Бульвар Гусева\n"
+                "• Улица Псковская\n"
+                "• Улица С.Я. Лемешева\n\n"
+            )
+            await update.message.reply_text(
+                f"❌ <b>К сожалению, этот адрес не входит в зону обслуживания</b>\n\n"
+                f"{streets_list}"
+                f"Пожалуйста, введите адрес в Южном микрорайоне:\n"
+                f"Например: <i>Октябрьский проспект, д. 50</i>",
+                parse_mode='HTML'
+            )
+            return NEW_ADDRESS
+            
+        # Проверка на повторный ввод
+        if user_data[user_id].get('address_confirmed', False):
+            print(f"⚠️ Пользователь уже вводил адрес")
+            await update.message.reply_text(
+                "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
+                ]])
+            )
+            return ConversationHandler.END
+            
+        # Обычный поток заказа - запрашиваем подъезд
+        user_data[user_id]['address_confirmed'] = True
+        print(f"✅ Адрес подтверждён, переходим к подъезду")
+        
+        await update.message.reply_text(
+            f"✅ Адрес принят: <b>{address}</b>\n\n"
+            f"🚪 Введите номер подъезда:",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⏭ Пропустить", callback_data="skip_entrance")
+            ]])
+        )
+        return NEW_ENTRANCE
         
     except Exception as e:
         print(f"❌ ОШИБКА в new_address: {e}")
         import traceback
         traceback.print_exc()
         return ConversationHandler.END
-    
-    # ========== ПРОВЕРЯЕМ, ДОБАВЛЯЕТСЯ ЛИ АДРЕС ИЗ ИЗБРАННОГО ==========
-    if user_data[user_id].get('adding_from_favorites'):
-        print(f"⭐ Добавление адреса в избранное из меню избранного")
-        
-        # Сбрасываем флаг
-        user_data[user_id]['adding_from_favorites'] = False
-        
-        # Подтверждаем получение адреса
-        await update.message.reply_text(
-            f"✅ Адрес принят: <b>{address}</b>\n\n"
-            f"📝 Теперь введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):",
-            parse_mode='HTML'
-        )
-        return FAVORITE_NAME
-    
-    # ========== ДАЛЬШЕ ИДЕТ КОД ДЛЯ ОБЫЧНОГО ЗАКАЗА ==========
-    
-    # Проверка района
-    if not is_address_allowed(address):
-        streets_list = (
-            "📍 <b>Зона обслуживания - Южный микрорайон:</b>\n\n"
-            "• Октябрьский проспект\n"
-            "• Улица Можайского\n"
-            "• Улица Королева\n"
-            "• Улица Левитана\n"
-            "• Бульвар Гусева\n"
-            "• Улица Псковская\n"
-            "• Улица С.Я. Лемешева\n\n"
-        )
-        
-        await update.message.reply_text(
-            f"❌ <b>К сожалению, этот адрес не входит в зону обслуживания</b>\n\n"
-            f"{streets_list}"
-            f"Пожалуйста, введите адрес в Южном микрорайоне:\n"
-            f"Например: <i>Октябрьский проспект, д. 50</i>",
-            parse_mode='HTML'
-        )
-        return NEW_ADDRESS
-    
-    # Если пользователь уже вводил адрес (но это не должно случаться)
-    if user_id in user_data and user_data[user_id].get('address_confirmed', False):
-        await update.message.reply_text(
-            "❌ Вы уже ввели адрес. Если хотите изменить адрес, начните заказ заново.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📦 Новый заказ", callback_data='new_order')
-            ]])
-        )
-        return ConversationHandler.END
-    
-    # Обычный поток заказа - запрашиваем подъезд
-    user_data[user_id]['address_confirmed'] = True
-    
-    await update.message.reply_text(
-        f"✅ Адрес принят: <b>{address}</b>\n\n"
-        f"🚪 Введите номер подъезда:",
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭ Пропустить", callback_data="skip_entrance")
-        ]])
-    )
-    return NEW_ENTRANCE
 
 async def new_entrance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение подъезда"""
