@@ -1943,6 +1943,74 @@ async def order_detail_select(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def order_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Детальный просмотр конкретного заказа"""
+    query = update.callback_query
+    await query.answer()
+    
+    order_id = int(query.data.replace('order_detail_', ''))
+    
+    import database as db
+    order = db.get_order_by_id(order_id)
+    
+    if not order:
+        await query.edit_message_text(
+            "❌ Заказ не найден",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data='order_detail_select')
+            ]])
+        )
+        return
+    
+    # Безопасная распаковка через индексы
+    order_id = order[0]
+    user_id = order[1]
+    name = order[2] if len(order) > 2 else ''
+    phone = order[3] if len(order) > 3 else ''
+    street = order[4] if len(order) > 4 else ''
+    entrance = order[5] if len(order) > 5 else ''
+    floor = order[6] if len(order) > 6 else ''
+    apt = order[7] if len(order) > 7 else ''
+    intercom = order[8] if len(order) > 8 else ''
+    date = order[9] if len(order) > 9 else ''
+    time = order[10] if len(order) > 10 else ''
+    bags = order[11] if len(order) > 11 else 0
+    price = order[12] if len(order) > 12 else 0
+    status = order[13] if len(order) > 13 else 'unknown'
+    created = order[14] if len(order) > 14 else ''
+    
+    # Формируем полный адрес
+    full_address = street
+    details = []
+    if entrance and entrance not in ['0', '-']:
+        details.append(f"под. {entrance}")
+    if floor and floor not in ['0', '-']:
+        details.append(f"эт. {floor}")
+    if apt and apt not in ['0', '-']:
+        details.append(f"кв. {apt}")
+    if intercom and intercom not in ['0', '-']:
+        details.append(f"домофон {intercom}")
+    if details:
+        full_address += f" ({', '.join(details)})"
+    
+    # Статус
+    status_emoji = {'new': '🆕', 'confirmed': '✅', 'completed': '✅', 'cancelled': '❌'}.get(status, '📝')
+    status_text = {'new': 'Активен', 'confirmed': 'Подтверждён', 'completed': 'Выполнен', 'cancelled': 'Отменён'}.get(status, status)
+    
+    text = (
+        f"{status_emoji} <b>Заказ #{order_id}</b>\n\n"
+        f"👤 {name}\n"
+        f"📞 {phone}\n"
+        f"📍 {full_address}\n"
+        f"📅 {date} {time}\n"
+        f"🛍 {bags} мешков — {price} ₽\n"
+        f"📊 Статус: {status_text}\n\n"
+    )
+    
+    keyboard = [[InlineKeyboardButton("◀️ Назад к списку", callback_data='order_detail_select')]]
+    
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение сообщения от клиента"""
     user_id = update.effective_user.id
