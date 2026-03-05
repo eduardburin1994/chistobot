@@ -326,26 +326,37 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение адреса"""
-    user_id = update.effective_user.id
-    address = update.message.text.strip()
-    
-    print(f"🏠 Получен адрес от пользователя {user_id}: {address}")
-    
-    # Проверяем, что адрес не пустой
-    if not address or len(address) < 5:
-        await update.message.reply_text(
-            "❌ Пожалуйста, введите корректный адрес (минимум 5 символов).\n"
-            "Например: <i>ул. Ленина, д. 10</i>",
-            parse_mode='HTML'
-        )
-        return NEW_ADDRESS
-    
-    from config import user_data
-    if user_id not in user_data:
-        user_data[user_id] = {}
-    
-    # Сохраняем адрес
-    user_data[user_id]['street_address'] = address
+    try:
+        user_id = update.effective_user.id
+        if not update.message:
+            print(f"❌ new_address: нет сообщения")
+            return ConversationHandler.END
+            
+        address = update.message.text.strip()
+        print(f"🏠 new_address: получен адрес от пользователя {user_id}: {address}")
+        
+        # Проверяем, что адрес не пустой
+        if not address or len(address) < 5:
+            await update.message.reply_text(
+                "❌ Пожалуйста, введите корректный адрес (минимум 5 символов).\n"
+                "Например: <i>ул. Ленина, д. 10</i>",
+                parse_mode='HTML'
+            )
+            return NEW_ADDRESS
+            
+        from config import user_data
+        if user_id not in user_data:
+            user_data[user_id] = {}
+            
+        # Сохраняем адрес
+        user_data[user_id]['street_address'] = address
+        print(f"✅ new_address: адрес сохранён: {address}")
+        
+    except Exception as e:
+        print(f"❌ ОШИБКА в new_address: {e}")
+        import traceback
+        traceback.print_exc()
+        return ConversationHandler.END
     
     # ========== ПРОВЕРЯЕМ, ДОБАВЛЯЕТСЯ ЛИ АДРЕС ИЗ ИЗБРАННОГО ==========
     if user_data[user_id].get('adding_from_favorites'):
