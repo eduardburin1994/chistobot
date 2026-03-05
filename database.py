@@ -15,9 +15,6 @@ def moscow_now():
     """Возвращает текущее московское время (UTC+3)"""
     return datetime.datetime.now() + datetime.timedelta(hours=3)
 
-# Получаем строку подключения из переменной окружения
-DATABASE_URL = os.environ.get('DATABASE_URL')
-
 # =============== РЕФЕРАЛЬНАЯ СИСТЕМА ===============
 
 def init_referral_tables():
