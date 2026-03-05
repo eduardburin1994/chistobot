@@ -279,24 +279,41 @@ async def bags_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return PAYMENT_METHOD
 
-async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение нового адреса с проверкой района и наличия номера дома"""
+async def new_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение адреса"""
     user_id = update.effective_user.id
     address = update.message.text
-    print(f"🔥🔥🔥 new_address ВЫЗВАНА для пользователя {user_id}")
-    print(f"🔥 Получен адрес: {address}")
-    print(f"🔥 Проверка района: {is_address_allowed(address)}")
-    print(f"🏠 [new_address] Вход в функцию. User: {user_id}, Адрес: {address}")
     
-    # =============== ПРОВЕРКА НАЛИЧИЯ НОМЕРА ДОМА ===============
-    if not re.search(r'\d', address):
+    print(f"🏠 Получен адрес от пользователя {user_id}: {address}")
+    
+    from config import user_data
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    
+    # Сохраняем адрес
+    user_data[user_id]['street_address'] = address
+    
+    # ========== ПРОВЕРЯЕМ, ДОБАВЛЯЕТСЯ ЛИ АДРЕС ИЗ ИЗБРАННОГО ==========
+    if user_data[user_id].get('adding_from_favorites'):
+        print(f"⭐ Добавление адреса в избранное из меню избранного")
+        
+        # Сбрасываем флаг
+        user_data[user_id]['adding_from_favorites'] = False
+        
+        # Запрашиваем название для избранного
         await update.message.reply_text(
-            "❌ <b>Укажите номер дома</b>\n\n"
-            "Пожалуйста, введите адрес вместе с номером дома.\n"
-            "Например: <i>Октябрьский проспект, д. 50</i> или <i>Левитана 23</i>",
-            parse_mode='HTML'
+            "📝 Введите название для этого адреса (например: 'Дом', 'Работа', 'Дача'):"
         )
-        return NEW_ADDRESS
+        return FAVORITE_NAME
+    
+    # Обычный поток заказа - запрашиваем подъезд
+    await update.message.reply_text(
+        "🚪 Введите номер подъезда:",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭ Пропустить", callback_data="skip_entrance")
+        ]])
+    )
+    return NEW_ENTRANCE
     # ============================================================
     
     # Проверяем, не вводил ли пользователь уже адрес
@@ -1634,59 +1651,57 @@ async def favorite_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return FAVORITE_NAME
 
-async def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение адреса из базы данных в избранное"""
+aasync def favorite_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Сохранение адреса в избранное"""
     user_id = update.effective_user.id
-    address_name = update.message.text
+    favorite_name = update.message.text
     
+    from config import user_data
+    if user_id not in user_data:
+        user_data[user_id] = {}
+    
+    # Получаем данные адреса
+    address_data = {
+        'street_address': user_data[user_id].get('street_address'),
+        'entrance': user_data[user_id].get('entrance', ''),
+        'floor': user_data[user_id].get('floor', ''),
+        'apartment': user_data[user_id].get('apartment', ''),
+        'intercom': user_data[user_id].get('intercom', '')
+    }
+    
+    # Сохраняем в базу
     import database as db
+    favorite_id = db.add_favorite_address(
+        user_id=user_id,
+        name=favorite_name,
+        **address_data
+    )
     
-    # Получаем данные пользователя из базы
-    user_info = db.get_user_by_id(user_id)
-    
-    if not user_info or not user_info[5]:
+    if favorite_id:
         await update.message.reply_text(
-            "❌ Ошибка: адрес не найден в базе данных.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ В меню", callback_data='back_to_menu')
-            ]])
+            f"✅ Адрес <b>«{favorite_name}»</b> добавлен в избранное!\n\n"
+            f"📍 <b>Адрес:</b> {address_data['street_address']}\n"
+            f"🚪 <b>Подъезд:</b> {address_data['entrance'] or 'не указан'}\n"
+            f"🏢 <b>Этаж:</b> {address_data['floor'] or 'не указан'}\n"
+            f"🚪 <b>Квартира:</b> {address_data['apartment'] or 'не указана'}\n"
+            f"📞 <b>Домофон:</b> {address_data['intercom'] or 'не указан'}",
+            parse_mode='HTML'
+        )
+        
+        # Показываем меню избранного
+        from keyboards.client_keyboards import get_favorites_menu_keyboard
+        favorites = db.get_user_favorites(user_id)
+        
+        await update.message.reply_text(
+            "📍 <b>Ваши избранные адреса:</b>\n\n"
+            "Теперь этот адрес доступен при заказе!",
+            parse_mode='HTML',
+            reply_markup=get_favorites_menu_keyboard(favorites)
         )
         return ConversationHandler.END
-    
-    # Сохраняем адрес в избранное
-    db.save_favorite_address(
-        user_id,
-        address_name,
-        user_info[5],
-        user_info[6] or '',
-        user_info[7] or '',
-        user_info[8] or '',
-        user_info[9] or ''
-    )
-    
-    # Формируем красивый адрес для подтверждения
-    full_address = user_info[5]
-    details = []
-    if user_info[6]:
-        details.append(f"под. {user_info[6]}")
-    if user_info[7]:
-        details.append(f"эт. {user_info[7]}")
-    if user_info[8]:
-        details.append(f"кв. {user_info[8]}")
-    if user_info[9]:
-        details.append(f"домофон {user_info[9]}")
-    if details:
-        full_address += f" ({', '.join(details)})"
-    
-    await update.message.reply_text(
-        f"✅ Адрес '{address_name}' сохранён в избранное!\n\n"
-        f"📍 {full_address}",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⭐ Мои адреса", callback_data='favorite_menu')
-        ]])
-    )
-    
-    return ConversationHandler.END
+    else:
+        await update.message.reply_text("❌ Ошибка при сохранении адреса")
+        return ConversationHandler.END
 
 async def manage_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Управление избранными адресами"""

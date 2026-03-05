@@ -384,6 +384,28 @@ async def button_handler(update: Update, context):
         await favorite_add(update, context)
         return ConversationHandler.END
     
+    if query.data == 'favorite_add_new_address':
+        print(f"➕ ДОБАВЛЕНИЕ НОВОГО АДРЕСА ИЗ ИЗБРАННОГО")
+        
+        user_id = query.from_user.id
+        from config import user_data
+        
+        # Инициализируем данные пользователя
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        
+        # Устанавливаем флаг, что это добавление из избранного
+        user_data[user_id]['adding_from_favorites'] = True
+        
+        # Запрашиваем адрес
+        await query.edit_message_text(
+            "🏠 <b>Добавление нового адреса в избранное</b>\n\n"
+            "Введите адрес (улица и номер дома):\n"
+            "<i>Например: ул. Ленина, д. 10</i>",
+            parse_mode='HTML'
+        )
+        return NEW_ADDRESS
+
     if query.data == 'favorite_delete':
         await favorite_delete_menu(update, context)
         return ConversationHandler.END
